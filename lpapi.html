@@ -1,0 +1,1517 @@
+﻿<%
+//220705
+var i1 = GetCurTicks();
+var bSaveTemplatesInCache = false;
+var bUseTemplateCache = true;
+var sTemplatesCacheKey = "lpe_widgets_cache";
+var sResponse = null;
+var curUserID = null;
+var curObjectID = null;
+var curDocID = null;
+var curUser = null;
+var curObject = null;
+var curDoc = null;
+
+oUserInit = tools_web.user_init( Request, Request.Query );
+Env = Request.Session.GetOptProperty( "Env", ({}) );
+InPlaceEval( tools_web.env_to_script( Env ) );
+
+curObjectEnvSave = true;
+Server.Execute( AppDirectoryPath() + "/wt/web/include/host_init.html" );
+Server.Execute( AppDirectoryPath() + "/wt/web/include/object_init.html" );
+
+
+Response.ContentType = "application/json; charset=utf-8";
+var oAnswer = ({ "error": 0, "error_text": "" });
+
+
+
+function obj_to_fld( fldTarget, oParam )
+{
+	var oElem, sNameElem, fldChild;
+	for ( sNameElem in oParam )
+	{
+		if ( ! fldTarget.ChildExists( sNameElem ) )
+		{
+			continue;
+		}
+
+		oElem = oParam.GetProperty( sNameElem );
+		if ( IsArray( oElem ) )
+		{
+			for ( oArrElem in oElem )
+			{
+				fldChild = fldTarget.Child( sNameElem ).AddChild();
+				obj_to_fld( fldChild, oArrElem );
+			}
+		}
+		else
+		{
+			fldTarget.Child( sNameElem ).Value = oElem;
+		}
+	}
+}
+
+
+function create_web_mode( oSource, teWebModeParam, bAllParam )
+{
+	if ( oSource == null )
+	{
+		oSource = new Object;
+	}
+
+	oSource.id = teWebModeParam.id.XmlValue;
+	oSource.code = teWebModeParam.code.Value;
+	oSource.name = teWebModeParam.name.Value;
+	oSource.is_std = teWebModeParam.is_std.Value;
+	oSource.content_access = check_web_mode_content_access( teWebModeParam );
+	oSource.catalog_name = teWebModeParam.catalog_name.Value;
+	oSource.placeholder_id = teWebModeParam.placeholder_template_id.XmlValue;
+	oSource.web_design_id = teWebModeParam.web_design_id.XmlValue;
+	oSource.url = tools_web.get_mode_clean_url( teWebModeParam.code, null, { placeholder: "empty" } );
+	oSource.modification_date = teWebModeParam.doc_info.modification.date.HasValue ? teWebModeParam.doc_info.modification.date.XmlValue : teWebModeParam.doc_info.creation.date.XmlValue;
+	oSource.creation_date = teWebModeParam.doc_info.creation.date.XmlValue;
+	oSource.enable_anonymous_access = teWebModeParam.access.enable_anonymous_access.Value;
+	oSource.comment = teWebModeParam.comment.Value;
+	oSource.template_links = tools_lp.fld_to_arr( teWebModeParam.template_links );
+	if ( teWebModeParam.object_id.HasValue )
+	{
+		oSource.sample_object_id = teWebModeParam.object_id.XmlValue;
+		oSource.sample_object_title = teWebModeParam.object_name.Value;
+	}
+	if ( bAllParam )
+	{
+		oSource.wvars = tools_lp.fld_to_arr( teWebModeParam.wvars );
+		oSource.zones = [];
+	}
+	return oSource;
+}
+
+
+function return_error( iCodeParam, sTextParam )
+{
+	oAnswer.error = iCodeParam;
+	oAnswer.error_text = sTextParam;
+	Cancel();
+}
+
+
+function create_templates( oSourceParam, iParentOverrideWebTemplateIDParam, xarrZoneOverrideWebTemplatesParam, xarrOverrideWebTemplatesParam, teWebModeParam )
+{
+	var bResSave = false;
+	var arrTemplates = oSourceParam.GetOptProperty( "templates", [] );
+	var xarrZoneOverrideWebTemplates = [];
+	for ( oTemplateElem in arrTemplates )
+	{
+		iTemplateID = Int( oTemplateElem.id );
+		iOverrideTemplateID = OptInt( oTemplateElem.GetOptProperty( "override_template_id" ), null );
+		iWeight = OptInt( oTemplateElem.GetOptProperty( "weight" ) );
+
+		if ( iOverrideTemplateID != null )
+		{
+			try
+			{
+				docOverrideWebTemplate = OpenDoc( UrlFromDocID( iOverrideTemplateID ) );
+				if ( docOverrideWebTemplate.TopElem.custom_web_template_id != iTemplateID || docOverrideWebTemplate.TopElem.zone != oZoneElem.name )
+					throw "wrong";
+
+				if ( docOverrideWebTemplate.TopElem.mode != sNewCode || ( iWeight != undefined && docOverrideWebTemplate.TopElem.weight != iWeight ) )
+				{
+					docOverrideWebTemplate.TopElem.mode = sNewCode;
+					if ( iWeight != undefined )
+						docOverrideWebTemplate.TopElem.weight = iWeight;
+					docOverrideWebTemplate.Save();
+					bResSave = true;
+				}
+			}
+			catch ( err )
+			{
+				iOverrideTemplateID = null;
+			}
+		}
+
+		if ( iOverrideTemplateID == null )
+		{
+			docOverrideWebTemplate = OpenNewDoc( "x-local://wtv/wtv_override_web_template.xmd" );
+			//docOverrideWebTemplate.TopElem.web_design_id = iDesignID;
+			//docOverrideWebTemplate.TopElem.site_id = iSiteID;
+			//docOverrideWebTemplate.TopElem.code = teWebMode.code + "_main";
+			docOverrideWebTemplate.TopElem.zone = oZoneElem.name;
+			docOverrideWebTemplate.TopElem.mode = teWebMode.code;
+			docOverrideWebTemplate.TopElem.custom_web_template_id = iTemplateID;
+			docOverrideWebTemplate.TopElem.parent_id = iParentOverrideWebTemplateIDParam;
+			tools.common_filling( "custom_web_template", docOverrideWebTemplate.TopElem, iTemplateID );
+			if ( iWeight != undefined )
+			{
+				docOverrideWebTemplate.TopElem.weight = iWeight;
+			}
+			if ( teWebModeParam != undefined )
+			{
+				docOverrideWebTemplate.TopElem.access.enable_anonymous_access = teWebModeParam.access.enable_anonymous_access;
+				docOverrideWebTemplate.TopElem.web_design_id = teWebModeParam.web_design_id;
+			}
+
+			docOverrideWebTemplate.BindToDb( DefaultDb );
+			docOverrideWebTemplate.Save();
+			bResSave = true;
+			iOverrideTemplateID = docOverrideWebTemplate.DocID;
+			oTemplateElem.override_template_id = docOverrideWebTemplate.TopElem.id.XmlValue;
+			oTemplateElem.url = tools_web.get_object_source_url( "custom_web_template", iTemplateID, { "override_web_template_id": docOverrideWebTemplate.TopElem.id.Value } );
+
+		}
+
+		xarrZoneOverrideWebTemplates = ArraySelectByKey( xarrOverrideWebTemplatesParam, iOverrideTemplateID, "parent_id" );
+		if ( create_templates( oTemplateElem, iOverrideTemplateID, xarrZoneOverrideWebTemplates, xarrOverrideWebTemplatesParam, teWebModeParam ) )
+		{
+			bResSave = true;
+		}
+	}
+
+	for ( catOverrideWebTemplateElem in xarrZoneOverrideWebTemplatesParam )
+	{
+		if ( ArrayOptFindByKey( arrTemplates, catOverrideWebTemplateElem.id.XmlValue, "override_template_id" ) == undefined )
+		{
+			DeleteDoc( UrlFromDocID( catOverrideWebTemplateElem.id ) );
+			bResSave = true;
+
+			for ( catTemplateOverrideWebTemplateElem in ArraySelectByKey( xarrOverrideWebTemplatesParam, catOverrideWebTemplateElem.id, "parent_id" ) )
+			{
+				DeleteDoc( UrlFromDocID( catTemplateOverrideWebTemplateElem.id ) );
+				bResSave = true;
+			}
+		}
+	}
+
+	return bResSave;
+}
+
+
+function set_templates( oTargetParam, iParentOverrideWebTemplateIDParam, xarrZoneOverrideWebTemplatesParam, xarrOverrideWebTemplatesParam )
+{
+	var oTemplate = new Object;
+	for ( catZoneOverrideWebTemplateElem in xarrZoneOverrideWebTemplatesParam )
+	{
+		teOverrideWebTemplate = OpenDoc( UrlFromDocID( catZoneOverrideWebTemplateElem.id ) ).TopElem;
+		teCustomWebTemplate = OpenDoc( UrlFromDocID( catZoneOverrideWebTemplateElem.custom_web_template_id ) ).TopElem;
+
+		for ( fldWvarElem in teOverrideWebTemplate.wvars )
+		{
+			teCustomWebTemplate.wvars.ObtainChildByKey( fldWvarElem.PrimaryKey ).AssignElem( fldWvarElem );
+		}
+
+		oTemplate = ({
+			"id": teCustomWebTemplate.id.XmlValue,
+			"override_template_id": teOverrideWebTemplate.id.XmlValue,
+			"name": teCustomWebTemplate.name.Value,
+			"weight": teOverrideWebTemplate.weight.Value,
+			"url": tools_web.get_object_source_url( "custom_web_template", teCustomWebTemplate.id, { "override_web_template_id": teOverrideWebTemplate.id.Value } ),
+			"params": tools_lp.fld_to_arr( teCustomWebTemplate.wvars )
+		});
+		if ( teCustomWebTemplate.resource_id.HasValue )
+		{
+			oTemplate.icon = tools_web.get_object_source_url( "resource", teCustomWebTemplate.resource_id );
+		}
+		if ( iParentOverrideWebTemplateIDParam != null )
+		{
+			oTemplate.parent_id = teOverrideWebTemplate.parent_id.XmlValue;
+		}
+
+		iOverrideTemplateID = teOverrideWebTemplate.id.Value;
+		xarrTemplateOverrideWebTemplates = ArraySelectByKey( xarrOverrideWebTemplatesParam, iOverrideTemplateID, "parent_id" );
+		set_templates( oTemplate, iOverrideTemplateID, xarrTemplateOverrideWebTemplates, xarrOverrideWebTemplatesParam );
+		if ( ! oTargetParam.HasProperty( "templates" ) )
+		{
+			oTargetParam.templates = [];
+		}
+		oTargetParam.templates.push( oTemplate );
+	}
+}
+
+
+function save_templates( oSourceParam )
+{
+	var arrTemplates = oSourceParam.GetOptProperty( "templates", [] );
+	var docOverrideWebTemplate = null;
+	var teOverrideWebTemplate = null;
+	for ( oTemplateElem in arrTemplates )
+	{
+		try
+		{
+			iTemplateID = Int( oTemplateElem.id );
+			iOverrideTemplateID = Int( oTemplateElem.override_template_id );
+			docOverrideWebTemplate = OpenDoc( UrlFromDocID( iOverrideTemplateID ) );
+			teOverrideWebTemplate = docOverrideWebTemplate.TopElem;
+			if ( teOverrideWebTemplate.custom_web_template_id != iTemplateID || teOverrideWebTemplate.zone != oZoneElem.name/* || teOverrideWebTemplate.mode != teObject.code*/ )
+				throw "wrong";
+			teCustomWebTemplate = OpenDoc( UrlFromDocID( iTemplateID ) ).TopElem;
+		}
+		catch ( err )
+		{
+			return_error( 500, "Wrong template." );
+		}
+		bOverrideSave = false;
+		arrParams = oTemplateElem.GetOptProperty( "params", [] );
+		arrDeletedWvars = [];
+		for ( oParamElem in arrParams )
+		{
+			fldWvar = teCustomWebTemplate.wvars.GetOptChildByKey( oParamElem.name );
+			if ( fldWvar == undefined )
+			{
+				fldOverrideWvar = teOverrideWebTemplate.wvars.ObtainChildByKey( oParamElem.name );
+				fldOverrideWvar.type = oParamElem.type;
+				fldOverrideWvar.value = oParamElem.value;
+				fldOverrideWvar.position = OptInt( oParamElem.position, null );
+
+				sWvarParentName = oParamElem.GetOptProperty( "parent_wvar_name" );
+				if ( sWvarParentName != '' )
+				{
+					if ( ArrayOptFind( arrDeletedWvars, "This==" + CodeLiteral( sWvarParentName ) ) == undefined )
+					{
+						for ( fldWvarElem in ArraySelectByKey( teCustomWebTemplate.wvars, sWvarParentName, "parent_wvar_name" ) )
+						{
+							fldWvarElem.Delete();
+						}
+						arrDeletedWvars.push( sWvarParentName );
+					}
+					fldOverrideWvar.parent_wvar_name = sWvarParentName;
+				}
+				bOverrideSave = true;
+			}
+			else
+			{
+				fldOverrideWvar = teOverrideWebTemplate.wvars.GetOptChildByKey( oParamElem.name );
+				if ( fldOverrideWvar != undefined || fldWvar.value != oParamElem.value )
+				{
+					if ( fldOverrideWvar == undefined && fldWvar.value != oParamElem.value )
+					{
+						fldOverrideWvar = teOverrideWebTemplate.wvars.AddChild();
+						fldOverrideWvar.AssignElem( fldWvar );
+						fldOverrideWvar.value = oParamElem.value;
+						bOverrideSave = true;
+					}
+					else if ( fldOverrideWvar != undefined && fldOverrideWvar.value != oParamElem.value )
+					{
+						fldOverrideWvar.AssignElem( fldWvar );
+						fldOverrideWvar.value = oParamElem.value;
+						bOverrideSave = true;
+					}
+				}
+			}
+		}
+		if ( bOverrideSave )
+		{
+			docOverrideWebTemplate.Save();
+		}
+
+		save_templates( oTemplateElem );
+	}
+}
+
+
+
+/* start repositoriums */
+var bUseOrg = false;
+var bAddOrphanedResources = true;
+var arrObjectDoc = new Array();
+function get_object( id )
+{
+	id = OptInt( id );
+	gr = ArrayOptFind( arrObjectDoc, "This.id == " + id );
+	if( gr == undefined )
+	{
+		gr = new Object();
+		gr.id = id;
+		gr.doc = OpenDoc( UrlFromDocID( id ) );
+		arrObjectDoc.push( gr );
+	}
+	return gr;
+}
+
+function fnResourceHasParentRepo( oArgs )
+{
+	for( oRep in oArgs.oRepoList )
+	{
+		if( ArrayOptFind( oArgs.oRepoList.GetProperty( oRep ).files, "This.id == oArgs.oResourceElem.PrimaryKey.Value" ) != undefined )
+		{
+			return true;
+		}
+	}
+	return false;
+}
+function fnResourceToObject( oResourceElem )
+{
+	return {
+		"id": oResourceElem.PrimaryKey.Value,
+		"name": HtmlEncode(oResourceElem.name.Value),
+		"file_name": HtmlEncode(oResourceElem.file_name.Value),
+		"type": oResourceElem.type.Value,
+		"status": ( oResourceElem.ChildExists( "status" ) ? oResourceElem.status.Value : "" ),
+		"person_id": oResourceElem.person_id.Value,
+		"person_fullname": HtmlEncode(oResourceElem.person_fullname.Value),
+		"use_count": oResourceElem.use_count.Value,
+		"size": oResourceElem.size.Value,
+		"knowledge_parts": oResourceElem.knowledge_parts.Value,
+		"tags": oResourceElem.tags.Value,
+		"modified": oResourceElem.modification_date.Value,
+		"url": tools_web.get_object_source_url("resource", oResourceElem.PrimaryKey )
+	};
+}
+
+function fnGetRepositorium( sId, sCond, oRepoList )
+{
+	switch( String( sId ) )
+	{
+		case "0":
+		{
+			oRepo = { "id": sId, "name": "", "files": [] };
+			for( catFileElem in XQuery( "for $i in resources where " + sCond + " return $i" ) )
+			{
+				if( fnResourceHasParentRepo( { oResourceElem: catFileElem, oRepoList: oRepoList } ) )
+				{
+					continue;
+				}
+				oRepo.files.push( fnResourceToObject( catFileElem ) );
+			}
+			break;
+		}
+		default:
+		{
+			teRepo = get_object( sId ).doc.TopElem;
+			iAuthorId = ArrayOptFirstElem( teRepo.authors ) != undefined ? ArrayOptFirstElem( teRepo.authors ).person_id.Value : "";
+			oRepo = { "id": sId, "name": teRepo.name.Value, "person_id": iAuthorId, "files": [] };
+			for(catFileElem in QueryCatalogByKeys( "resources", "id", ArrayExtract( teRepo.files, "PrimaryKey" ) ) )
+			{
+				oRepo.files.push( fnResourceToObject( catFileElem ) );
+			}
+			break;
+		}
+	}
+	return oRepo;
+}
+
+function fnRepoListToJSON()
+{
+	var bResourcesByOrg = bUseOrg && (global_settings.settings.cl.access_setting == "org" || !curUser.org_id.HasValue);
+	var sCond = "";
+	if( bResourcesByOrg )
+	{
+		xarrUsers = XQuery( "for $i in collaborators where $i/org_id = " + curUser.org_id + " return $i" );
+		sCond = "MatchSome( $i/person_id, ( " + ArrayMerge( xarrUsers, "This.id", "," ) + " ) )";
+	}
+	else
+	{
+		sCond = "$i/person_id = " + curUserID;
+	}
+	var xarrMyRepositories = XQuery("for $i in repositorium_authors where " + sCond + " return $i");
+	var oRepoList = {};
+	var sId;
+	var teRepo;
+	for( catRepoElem in ArraySelectDistinct( xarrMyRepositories, "This.repositorium_id" ) )
+	{
+		sId = String( catRepoElem.repositorium_id );
+		oRepoList[ sId ] = fnGetRepositorium( sId, "", oRepoList );
+	}
+	if( bAddOrphanedResources )
+	{
+		sId = "0";
+		oRepoList[ sId ] = fnGetRepositorium( sId, sCond, oRepoList );
+	}
+	return oRepoList;
+}
+/*end repositoriums*/
+function fnGetAction( iActionIDParam )
+{
+	var iActionID = Int( iActionIDParam );
+	var teAction = OpenDoc( UrlFromDocID( iActionID ) ).TopElem;
+	var oAction = { id: iActionID, name: tools_web.get_cur_lng_name( teAction.name.Value, curLng.short_id ), wvars: [], result_fields: [] };
+	if(teAction.GetOptProperty("wvars")!=undefined)
+	{
+		oAction.wvars = tools_lp.fld_to_arr( teAction.wvars );
+	}
+	if(teAction.GetOptProperty("result_fields")!=undefined)
+	{
+		oAction.result_fields = ArrayExtract( teAction.result_fields, "({id:This.id.Value,name:This.name.Value,type:This.type.Value,title:This.title.Value,desc:This.desc.Value})" );
+	}
+	return oAction;
+}
+function fnGetActions( sCatalogName, sCatalogTypeParam )
+{
+	var aActions = [];
+	var sCatalogType = sCatalogTypeParam == undefined ? "remote_action" : sCatalogTypeParam;
+	var xarrActions = tools.xquery( "for $elem in " + sCatalogType + "s" + ( sCatalogName == "" ? "" : " where $elem/catalog_name = " + XQueryLiteral( sCatalogName ) ) + " return $elem/id, $elem/__data" );
+	for ( catActionElem in xarrActions )
+	{
+		aActions.push( fnGetAction( catActionElem.id.Value ) );
+	}
+	return aActions;
+}
+
+var aRestricted = [ "password" ];
+function fnGetObjectFields( sCatalogName, teObjectParam )
+{
+	var aFlds = [];
+	var oField = null;
+	var bIsObject = teObjectParam != undefined && teObjectParam != null;
+	if ( ! bIsObject )
+	{
+		teObjectParam = tools.new_doc_by_name( sCatalogName, false ).TopElem;
+	}
+	for ( fldElem in teObjectParam )
+	{
+		if ( (fldElem.Type != "string" && fldElem.Type != "integer" && fldElem.Type != "real" && fldElem.Type != "date" && fldElem.Type != "bool") || ( ArrayOptFind(aRestricted, "This=='" + fldElem.Name + "'")!=undefined ) )
+		{
+			continue;
+		}
+
+		oField = ({
+			id: fldElem.Name,
+			name: fldElem.Name,
+			type: fldElem.Type,
+			title: RValue( tools.get_field_title( fldElem, curLngWeb ) ),
+			desc: ""
+		});
+		if ( StrBegins( fldElem.ForeignArrayCodeStr, "common" ) || StrBegins( fldElem.ForeignArrayCodeStr, "lists" ) )
+		{
+			oField.entries = [];
+			for ( fldCommonElem in fldElem.ForeignArray )
+			{
+				oField.entries.push( { "id": String( fldCommonElem.PrimaryKey.Value ), "name": ( fldCommonElem.ChildExists( "name" ) ? fldCommonElem.name.Value : fldCommonElem.title.Value ) } );
+			}
+		}
+		if ( bIsObject )
+		{
+			oField.SetProperty( "value", fldElem.Value );
+		}
+
+		aFlds.push( oField );
+	}
+	return aFlds;
+}
+
+function fnGetContextFields( sCatalogName, teObjectParam )
+{
+	if ( sCatalogName == undefined || sCatalogName == '' )
+	{
+		return [];
+	}
+
+	var bIsObject = teObjectParam != undefined && teObjectParam != null;
+	if ( bIsObject )
+	{
+		Env.SetProperty( "curObject", teObjectParam );
+	}
+	return tools_lp.get_context( sCatalogName, bIsObject, Env );
+}
+
+function fnGetEnvFields ()
+{
+	var aFlds =
+	[
+		{ id: "nowDate", name: "nowDate", type: "string", title: "Текущая дата в формате ISO8601", desc: "" },
+		{ id: "nowDateTime", name: "nowDateTime", type: "string", title: "Текущая дата и время в формате ISO8601", desc: "" },
+		{ id: "nowDateString", name: "nowDateString", type: "string", title: "Текущая дата", desc: "" },
+		{ id: "nowDateTimeString", name: "nowDateTimeString", type: "string", title: "Текущая дата и время", desc: "" },
+		{ id: "nowTimeString", name: "nowTimeString", type: "string", title: "Текущее время", desc: "" },
+		{ id: "curEnvUrl", name: "curEnvUrl", type: "string", title: "Полный URL страницы", desc: "" },
+		{ id: "curHost.code", name: "curHost.code", type: "string", title: "Код хоста в системе", desc: "" },
+		{ id: "curHost.name", name: "curHost.name", type: "string", title: "Имя хоста в системе", desc: "" },
+		{ id: "curHost.port", name: "curHost.port", type: "integer", title: "Порт хоста", desc: "" },
+		{ id: "curHost.hostname", name: "curHost.hostname", type: "string", title: "Имя хоста", desc: "" },
+		{ id: "curHost.path", name: "curHost.path", type: "string", title: "Полный URL хоста", desc: "" },
+		{ id: "curHost.portal_auth_type", name: "curHost.portal_auth_type", type: "string", title: "Тип авторизации", desc: "" },
+		{ id: "curSite.code", name: "curSite.code", type: "string", title: "Код сайта", desc: "" },
+		{ id: "curSite.name", name: "curSite.name", type: "string", title: "Имя сайта", desc: "" },
+		{ id: "curSite.object_type", name: "curSite.object_type", type: "string", title: "Тип связанного с сайтом объекта", desc: "" },
+		{ id: "curSite.object_id", name: "curSite.object_id", type: "string", title: "ID связанного с сайтом объекта", desc: "" },
+		{ id: "curWebDesign.code", name: "curWebDesign.code", type: "string", title: "Код дизайна", desc: "" },
+		{ id: "curWebDesign.name", name: "curWebDesign.name", type: "string", title: "Имя дизайна", desc: "" },
+		{ id: "curDevice.type", name: "curDevice.type", type: "string", title: "Тип устройства", desc: "" },
+		{ id: "curLng.id", name: "curLng.id", type: "string", title: "Идентификатор языка", desc: "" },
+		{ id: "curLng.short_id", name: "curLng.short_id", type: "string", title: "Короткий идентификатор языка", desc: "" },
+		{ id: "curLng.name", name: "curLng.name", type: "string", title: "Название языка", desc: "" }
+	];
+	return aFlds;
+}
+
+function fnGetDocFields ()
+{
+	var aFlds =
+	[
+		{ id: "id", name: "id", type: "string", title: "ID документа", desc: "" },
+		{ id: "name", name: "name", type: "string", title: "Название документа", desc: "" },
+		{ id: "code", name: "code", type: "string", title: "Код документа", desc: "" },
+		{ id: "site_id", name: "site_id", type: "string", title: "ID сайта", desc: "" },
+		{ id: "parent_document_id", name: "parent_document_id", type: "string", title: "ID родительского документа", desc: "" },
+		{ id: "text_area", name: "text_area", type: "string", title: "Текстовый блок документа", desc: "" },
+		{ id: "comment", name: "comment", type: "string", title: "Комментарий", desc: "" }
+	];
+	return aFlds;
+}
+
+function fnSetWvars( fldTarget, arrWvarsParam )
+{
+	if ( arrWvarsParam == undefined || arrWvarsParam == null )
+	{
+		return false;
+	}
+
+	for ( oWvarElem in arrWvarsParam )
+	{
+		fldWvarChild = fldTarget.wvars.ObtainChildByKey( oWvarElem.name );
+		for ( sFiledNameElem in [ "value", "type", "parent_wvar_name" ] )
+		{
+			sValue = oWvarElem.GetOptProperty( sFiledNameElem );
+			if ( sValue != undefined )
+			{
+				fldWvarChild.Child( sFiledNameElem ).Value = sValue;
+			}
+		}
+	}
+/*
+	var arrDeleteWvars = ArraySelectByKey( arrWvarsParam, "#empty#", "value" );
+	for ( arrWvarsElem in [ ArraySelect( arrDeleteWvars, "This.GetOptProperty('parent_wvar_name','')!=''" ), ArraySelect( arrDeleteWvars, "This.GetOptProperty('parent_wvar_name','')==''" ) ] )
+	{
+		for ( oWvarElem in arrWvarsElem )
+		{
+			fldWvarChild = fldTarget.wvars.GetOptChildByKey( oWvarElem.name );
+			if ( fldWvarChild != undefined && ArrayOptFindByKey( fldTarget.wvars, fldWvarChild.name.Value, "parent_wvar_name" ) == undefined )
+			{
+				fldWvarChild.Delete();
+			}
+		}
+	}
+*/
+	//fldTarget.wvars.DeleteChilds( "ArrayOptFindByKey(arrWvarsParam,This.name.Value,'name')==undefined&&ArrayOptFindByKey(fldTarget.wvars,This.name.Value,'parent_wvar_name')==undefined" );
+	return true;
+}
+
+
+var oUserContentAccess = null;
+function get_user_content_access()
+{
+	if ( oUserContentAccess == null )
+	{
+		oUserContentAccess = tools.get_content_access( curUserID, curUser );
+	}
+	return oUserContentAccess;
+}
+
+function check_web_mode_access( teWebModeParam )
+{
+	if ( ! tools_web.check_access( teWebModeParam, curUserID, curUser, Session ) )
+	{
+		return false;
+	}
+	if ( teWebMode.func_managers.ChildByKeyExists( curUserID ) )
+	{
+		return true;
+	}
+	if ( check_web_mode_content_access( teWebModeParam ) )
+	{
+		return true;
+	}
+	return false;
+}
+
+function check_web_mode_content_access( teWebModeParam )
+{
+	var oContentAccess = get_user_content_access();
+	if ( ms_tools.check_content_access( oContentAccess, "web_mode", teWebModeParam.id, "write" ) )
+	{
+		return true;
+	}
+	return false;
+}
+
+
+
+try
+{
+	var oAction = ParseJson( UrlDecode( Request.Query.GetOptProperty( "action", "{}" ) ) );
+	var iObjectID = OptInt( oAction.GetOptProperty( "object_id" ), null );
+	var teObject = null;
+	if ( iObjectID != null )
+	{
+		docObject = OpenDoc( UrlFromDocID( iObjectID ) );
+		teObject = docObject.TopElem;
+
+		if ( ! tools_web.check_access( teObject, curUserID, curUser, Session ) )
+		{
+			return_error( 401, "Access denied." );
+		}
+	}
+	var iWebModeID = OptInt( oAction.GetOptProperty( "web_mode_id" ), null );
+	var teWebMode = null;
+	if ( iWebModeID != null )
+	{
+		docWebMode = OpenDoc( UrlFromDocID( iWebModeID ) );
+		teWebMode = docWebMode.TopElem;
+
+		if ( ! tools_web.check_access( teWebMode, curUserID, curUser, Session ) )
+		{
+			return_error( 401, "Access denied." );
+		}
+	}
+
+	oAnswer.action_completed = oAction.GetOptProperty( "action" );
+	var xarrWebModes = null;
+	var arrUsedWebModes = null;
+	var xarrRoles = null;
+	switch( oAnswer.action_completed )
+	{
+		case "init_step_1":
+		{
+			oAnswer.templates = [];
+			oAnswer.macros = [];
+			oAnswer.user_fields = [];
+			oAnswer.file_types = {};
+			oAnswer.repositoriums = [];
+
+			oAnswer.session_token = tools_web.get_sum_sid( curUserID, Session.sid );
+			oAnswer.web_modes = [];
+			oAnswer.used_web_modes = [];
+			oAnswer.web_designs = [];
+			xarrWebModes = tools.xquery( "for $elem in web_modes return $elem/id, $elem/code, $elem/__data" );
+			for ( catWebModeElem in xarrWebModes )
+			{
+				if(catWebModeElem.id!=null)
+				{
+					teWebMode = OpenDoc( UrlFromDocID( catWebModeElem.id ) ).TopElem;
+					if ( ! teWebMode.use_lpapi() )
+					{
+						continue;
+					}
+					if ( ! teWebMode.is_std )
+					{
+						if ( ! check_web_mode_access( teWebMode ) )
+						{
+							continue;
+						}
+					}
+
+					oAnswer.web_modes.push( create_web_mode( null, teWebMode, true ) );
+				}
+			}
+			arrUsedWebModes = ArraySelectDistinct( override_web_templates, "mode" );
+			for ( catWebModeElem in arrUsedWebModes )
+			{
+				oAnswer.used_web_modes.push( catWebModeElem.mode.Value );
+			}
+			oAnswer.collections = fnGetActions( "", "remote_collection" );
+
+			oAnswer.web_designs = ArrayExtract( web_designs, "({'id':This.id.XmlValue, 'int_id':This.id.Value, 'name':This.name.Value})" );
+			for(oDesign in oAnswer.web_designs)
+			{
+				teDesign = OpenDoc( UrlFromDocID( oDesign.int_id ) ).TopElem;
+				curWebDesignParamSets = new Object;
+				if ( teDesign.lp_custom_web_template_id.HasValue )
+				{
+					tools_web.insert_custom_code( teDesign.lp_custom_web_template_id, null, true, false );
+				}
+				oDesign.paramsets = ParseJson(EncodeJson(curWebDesignParamSets));
+			}
+			break;
+		}
+		case "init_step_2":
+		{
+			oAnswer.repositoriums = fnRepoListToJSON();
+			oAnswer.file_types = {};
+			for( oType in curLngCommon.resource_types )
+			{
+				oAnswer.file_types[oType.PrimaryKey] = { id: oType.PrimaryKey.Value, name: oType.name.Value };
+			}
+			break;
+		}
+		case "init_step_3":
+		{
+			if(bUseTemplateCache)
+			{
+				sResponse = tools_web.get_user_data(sTemplatesCacheKey);
+			}
+			if( !bUseTemplateCache || (bUseTemplateCache && (sResponse == null || (Request.QueryString.GetOptProperty("flush_templates")!=undefined))) )
+			{
+				sResponse = null;
+				oAnswer.templates = [];
+				oAnswer.macros = [];
+				for ( sRoleCodeElem in [ "widgets", "macros" ] )
+				{
+					xarrRoles = XQuery( "for $elem in roles where $elem/code = '" + sRoleCodeElem + "' return $elem/Fields('id')" );
+					if ( ArrayOptFirstElem( xarrRoles ) != undefined )
+					{
+						xarrCustomWebTemplates = tools.xquery( "for $elem in custom_web_templates where MatchSome( $elem/role_id, (" + ArrayMerge( xarrRoles, "id", "," ) + ") ) return $elem/id, $elem/__data" );
+						for ( catCustomWebTemplateElem in xarrCustomWebTemplates )
+						{
+							teCustomWebTemplate = OpenDoc( UrlFromDocID( catCustomWebTemplateElem.id ) ).TopElem;
+							oTemplate = ({
+								"id": teCustomWebTemplate.id.XmlValue,
+								"name": tools_web.get_cur_lng_name( teCustomWebTemplate.name.Value, curLng.short_id )
+							});
+							if ( teCustomWebTemplate.resource_id.HasValue )
+							{
+								oTemplate.icon = tools_web.get_object_source_url( "resource", teCustomWebTemplate.resource_id );
+							}
+							oTemplate.params = tools_lp.fld_to_arr( teCustomWebTemplate.wvars );
+							if ( sRoleCodeElem == "widgets" )
+							{
+								oAnswer.templates.push( oTemplate );
+							}
+							else
+							{
+								oAnswer.GetProperty( sRoleCodeElem ).push( oTemplate );
+							}
+						}
+					}
+				}
+				bSaveTemplatesInCache = true;
+			}
+			break;
+		}
+
+		case "init_data":
+		{
+			oAnswer.repositoriums = fnRepoListToJSON(); //alert("LPAPI " + oAnswer.action_completed + " after repo = " + (GetCurTicks() - i1));
+			oAnswer.file_types = {};
+			for( oType in curLngCommon.resource_types )
+			{
+				oAnswer.file_types[oType.PrimaryKey] = { id: oType.PrimaryKey.Value, name: oType.name.Value };
+			}
+
+			oAnswer.web_modes = [];
+			oAnswer.used_web_modes = [];
+			oAnswer.templates = [];
+			oAnswer.macros = [];
+			oAnswer.user_fields = [];
+			oAnswer.web_designs = [];
+
+			xarrWebModes = tools.xquery( "for $elem in web_modes return $elem/id, $elem/code, $elem/__data" );
+			for ( catWebModeElem in xarrWebModes )
+			{
+				teWebMode = OpenDoc( UrlFromDocID( catWebModeElem.id ) ).TopElem;
+				if ( ! check_web_mode_access( teWebMode ) )
+				{
+					continue;
+				}
+
+				oAnswer.web_modes.push( create_web_mode( null, teWebMode, true ) );
+			}
+
+			arrUsedWebModes = ArraySelectDistinct( override_web_templates, "mode" );
+			for ( catWebModeElem in arrUsedWebModes )
+			{
+				oAnswer.used_web_modes.push( catWebModeElem.mode.Value );
+			}
+
+			xarrRoles = null;
+			for ( sRoleCodeElem in [ "widgets", "macros" ] )
+			{
+				xarrRoles = XQuery( "for $elem in roles where $elem/code = '" + sRoleCodeElem + "' return $elem/Fields('id')" );
+				if ( ArrayOptFirstElem( xarrRoles ) != undefined )
+				{
+					xarrCustomWebTemplates = tools.xquery( "for $elem in custom_web_templates where MatchSome( $elem/role_id, (" + ArrayMerge( xarrRoles, "id", "," ) + ") ) return $elem/id, $elem/__data" );
+					for ( catCustomWebTemplateElem in xarrCustomWebTemplates )
+					{
+						teCustomWebTemplate = OpenDoc( UrlFromDocID( catCustomWebTemplateElem.id ) ).TopElem;
+						oTemplate = ({
+							"id": teCustomWebTemplate.id.XmlValue,
+							"name": tools_web.get_cur_lng_name( teCustomWebTemplate.name.Value, curLng.short_id )
+						});
+						if ( teCustomWebTemplate.resource_id.HasValue )
+						{
+							oTemplate.icon = tools_web.get_object_source_url( "resource", teCustomWebTemplate.resource_id );
+						}
+						oTemplate.params = tools_lp.fld_to_arr( teCustomWebTemplate.wvars );
+						if ( sRoleCodeElem == "widgets" )
+						{
+							oAnswer.templates.push( oTemplate );
+						}
+						else
+						{
+							oAnswer.GetProperty( sRoleCodeElem ).push( oTemplate );
+						}
+					}
+				}
+			}
+
+			oAnswer.user_fields = fnGetObjectFields( "collaborator", curUser );
+			oAnswer.session_token = tools_web.get_sum_sid( curUserID, Session.sid );
+			oAnswer.web_designs = ArrayExtract( web_designs, "({'id':This.id.XmlValue,'name':This.name.Value})" );
+			break;
+		}
+
+
+		case "get_web_mode":
+		{
+			bCheckToken = false;
+			iToken = OptInt( oAction.GetOptProperty( "session_token" ) );
+			if ( iToken != undefined )
+			{
+				bCheckToken = tools_web.check_sum_sid( curUserID, iToken, Session.sid );
+			}
+
+			create_web_mode( oAnswer, teWebMode, bCheckToken );
+/*
+			if ( teWebMode.placeholder_template_id.HasValue )
+			{
+				iPlaceholderCustomWebTemplateID = teWebMode.placeholder_template_id.Value;
+			}
+			else
+			{
+				iPlaceholderCustomWebTemplateID = curWebDesign.home_custom_web_template_id.Value;
+			}
+			tePlaceholder = OpenDoc( UrlFromDocID( iPlaceholderCustomWebTemplateID ) ).TopElem;
+			arrZones = tePlaceholder.zones;
+*/
+			if ( bCheckToken )
+			{
+				arrZones = [{"name":"main"}]; // simple
+				if ( ArrayCount( arrZones ) != 0 )
+				{
+					xarrOverrideWebTemplates = ArraySelectAll( XQuery( "for $elem in override_web_templates where $elem/mode = " + XQueryLiteral( teWebMode.code ) + " and MatchSome( $elem/zone, (" + ArrayMerge( arrZones, "CodeLiteral(This.name)", "," ) + ") ) and $elem/custom_web_template_id != null() return $elem/Fields('id','zone','custom_web_template_id','parent_id')" ) );
+					xarrCustomWebTemplates = ArraySelectAll( XQuery( "for $elem in custom_web_templates where MatchSome( $elem/id, (" + ArrayMerge( ArraySelectDistinct( xarrOverrideWebTemplates, "custom_web_template_id" ), "custom_web_template_id", "," ) + ") ) return $elem/Fields('id')" ) );
+					for ( fldZoneElem in arrZones )
+					{
+						oZone = ({ "name": RValue( fldZoneElem.name ), "templates": [] });
+						xarrZoneOverrideWebTemplates = ArraySelect( xarrOverrideWebTemplates, "!This.parent_id.HasValue&&This.zone==" + CodeLiteral( fldZoneElem.name ) );
+						set_templates( oZone, null, xarrZoneOverrideWebTemplates, xarrOverrideWebTemplates );
+						oAnswer.zones.push( oZone );
+					}
+				}
+				if ( oAnswer.catalog_name != undefined )
+				{
+					if ( oAnswer.catalog_name != "" )
+					{
+						oAnswer.remote_actions = fnGetActions( oAnswer.catalog_name );
+						oAnswer.collections = fnGetActions( oAnswer.catalog_name, "remote_collection" );
+						if ( bCheckToken )
+						{
+							oAnswer.object_fields = fnGetObjectFields( oAnswer.catalog_name, teObject );
+						}
+					}
+				}
+
+				oAnswer.user_fields = fnGetObjectFields( "collaborator", curUser );
+				oAnswer.context = fnGetContextFields( oAnswer.catalog_name, teObject );
+				oAnswer.env = fnGetEnvFields();
+				oAnswer.doc_fields = fnGetDocFields();
+			}
+			break;
+		}
+
+
+		case "save_web_mode_structure":
+		{
+			var bSaveWebMode = false;
+			var oWebMode = oAction.GetProperty( "web_mode" );
+			var sNewCode = oWebMode.GetOptProperty( "code", "" );
+			var sNewCatalogName = oWebMode.GetOptProperty( "catalog_name", "" );
+			var iSampleObjectID = oWebMode.GetOptProperty( "sample_object_id" );
+			var arrTemplateLinks = oWebMode.GetOptProperty( "template_links" );
+			var arrWvars = oWebMode.GetOptProperty( "wvars" );
+
+			if ( iWebModeID == null )
+			{
+				if ( ! tools_lp.check_access_lpe( curUser ) )
+				{
+					return_error( 401, "Access denied." );
+				}
+
+				if ( sNewCode == "" )
+				{
+					return_error( 3, "WebMode Code is empty." );
+				}
+
+				docWebMode = OpenNewDoc( "x-local://wtv/wtv_web_mode.xmd" );
+				docWebMode.BindToDb( DefaultDb );
+				teWebMode = docWebMode.TopElem;
+				teWebMode.code = sNewCode;
+				if(sNewCatalogName!="")
+				{
+					teWebMode.catalog_name = sNewCatalogName;
+				}
+				teWebMode.placeholder_template_id = tools.get_default_object_id( "custom_web_template", "placeholder_empty" );
+
+				fldFuncManager = teWebMode.func_managers.ObtainChildByKey( curUserID );
+				tools.common_filling( "collaborator", fldFuncManager, curUserID, curUser );
+
+				iWebModeID = docWebMode.DocID;
+				bSaveWebMode = true;
+			}
+			else if ( ! check_web_mode_access( teWebMode ) )
+			{
+				return_error( 401, "Access denied." );
+			}
+			var sLastCode = teWebMode.code.Value;
+
+			if ( sNewCode != "" )
+			{
+				var bCodeExists = false;
+				if ( ArrayOptFirstElem( XQuery( "for $elem in web_modes where $elem/code = " + XQueryLiteral( sNewCode ) + " and $elem/id != " + iWebModeID + " return $elem/Fields('id')" ) ) != undefined )
+				{
+					bCodeExists = true;
+				}
+				else if ( sNewCode != sLastCode )
+				{
+					arrUsedWebModes = ArraySelectDistinct( override_web_templates, "mode" );
+					if ( ArrayOptFindByKey( arrUsedWebModes, sNewCode, "mode" ) != undefined )
+					{
+						bCodeExists = true;
+					}
+				}
+				if ( bCodeExists )
+				{
+					return_error( 2, "WebMode Code already exists." );
+				}
+			}
+
+			var bChange = false;
+			if ( sNewCode != sLastCode )
+			{
+				teWebMode.code = sNewCode;
+				bSaveWebMode = true;
+				bChange = true;
+			}
+			var sName = oWebMode.GetOptProperty( "name" );
+			if ( sName != undefined && sName != teWebMode.name )
+			{
+				teWebMode.name = sName;
+				bSaveWebMode = true;
+			}
+			var sTestObject = oWebMode.GetOptProperty( "comment" );
+			if ( sTestObject != undefined && sTestObject != teWebMode.comment )
+			{
+				teWebMode.comment = sTestObject;
+				bSaveWebMode = true;
+			}
+			var iPlaceholderID = OptInt( oWebMode.GetOptProperty( "placeholder_id" ) );
+			if ( iPlaceholderID != undefined && iPlaceholderID != teWebMode.placeholder_template_id )
+			{
+				teWebMode.placeholder_template_id = iPlaceholderID;
+				bSaveWebMode = true;
+			}
+			var bEnableAnonymousAccess = tools_web.is_true( oWebMode.GetOptProperty( "enable_anonymous_access" ) );
+			if ( bEnableAnonymousAccess != teWebMode.access.enable_anonymous_access )
+			{
+				teWebMode.access.enable_anonymous_access = bEnableAnonymousAccess;
+				bSaveWebMode = true;
+				bChange = true;
+			}
+
+			if(sNewCatalogName!=teWebMode.catalog_name.Value)
+			{
+				teWebMode.catalog_name = sNewCatalogName;
+				bSaveWebMode = true;
+			}
+
+			if ( iSampleObjectID != undefined )
+			{
+				iSampleObjectID = OptInt( iSampleObjectID, null );
+				if ( teWebMode.object_id != iSampleObjectID )
+				{
+					teWebMode.object_id = iSampleObjectID;
+					tools.common_filling( "object", teWebMode, iSampleObjectID );
+					bSaveWebMode = true;
+				}
+			}
+
+			if ( arrTemplateLinks != undefined )
+			{
+				teWebMode.template_links.Clear();
+				for ( oTemplateLinkElem in arrTemplateLinks )
+				{
+					fldTemplateLink = teWebMode.template_links.AddChild();
+					obj_to_fld( fldTemplateLink, oTemplateLinkElem );
+				}
+				bSaveWebMode = true;
+			}
+
+			var iWebDesignID = OptInt( oWebMode.GetOptProperty( "web_design_id" ) );
+			if ( iWebDesignID != undefined && ! teWebMode.web_design_id.HasValue )
+			{
+				teWebMode.web_design_id = iWebDesignID;
+				bSaveWebMode = true;
+			}
+
+			if ( fnSetWvars( teWebMode, arrWvars ) )
+			{
+				bSaveWebMode = true;
+			}
+			teWebMode.wvars.ObtainChildByKey( "use_lpapi" ).value = "true";
+
+
+			var arrLinkConditions = [];
+			for ( fldTemplateLinkElem in docWebMode.TopElem.template_links )
+			{
+				for ( fldConditionElem in fldTemplateLinkElem.conditions )
+				{
+					if ( fldConditionElem.top_elem == "curContext" )
+					{
+						arrField = String( fldConditionElem.field ).split( "." );
+						arrLinkConditions.push( arrField[ 0 ] );
+					}
+				}
+			}
+			if ( ArrayCount( arrLinkConditions ) != 0 )
+			{
+				xarrStatisticRecs = XQuery( "for $elem in statistic_recs where MatchSome( $elem/code, (" + ArrayMerge( arrLinkConditions, "XQueryLiteral(This)", "," ) + ") ) return $elem/Fields('id')" );
+				arrLinkConditions = ArrayExtract( xarrStatisticRecs, "This.id.Value" );
+			}
+			for ( iLinkConditionElem in arrLinkConditions )
+			{
+				if ( ! docWebMode.TopElem.statistic_recs.ChildByKeyExists( iLinkConditionElem ) )
+				{
+					docWebMode.TopElem.statistic_recs.ObtainChildByKey( iLinkConditionElem );
+					bSaveWebMode = true;
+				}
+			}
+			var arrUsedContext = oWebMode.GetOptProperty( "used_context" );
+			if ( arrUsedContext != undefined )
+			{
+				for ( oUsedContextElem in arrUsedContext )
+				{
+					iContextID = OptInt( oUsedContextElem.GetOptProperty( "id" ) );
+					if ( iContextID == undefined )
+					{
+						sContextCode = oUsedContextElem.GetOptProperty( "code", "" );
+						if ( sContextCode != "" )
+						{
+							catStatisticRec = ArrayOptFirstElem( XQuery( "for $elem in statistic_recs where $elem/code = " + XQueryLiteral( sContextCode ) + " return $elem/Fields('id')" ) );
+							if ( catStatisticRec != undefined )
+							{
+								iContextID = catStatisticRec.id.Value;
+							}
+						}
+					}
+					if ( iContextID != undefined && ! docWebMode.TopElem.statistic_recs.ChildByKeyExists( iContextID ) )
+					{
+						docWebMode.TopElem.statistic_recs.ObtainChildByKey( iContextID );
+						bSaveWebMode = true;
+						oUsedContextElem.id = iContextID;
+					}
+				}
+
+			}
+			else
+			{
+				arrUsedContext = [];
+			}
+			for ( fldStatisticRecElem in ArraySelectAll( docWebMode.TopElem.statistic_recs ) )
+			{
+				if ( ArrayOptFind( arrLinkConditions, "This==" + fldStatisticRecElem.PrimaryKey ) == undefined && ArrayOptFind( arrUsedContext, "OptInt(This.GetOptProperty('id'))==" + fldStatisticRecElem.PrimaryKey ) == undefined )
+				{
+					fldStatisticRecElem.Delete();
+					bSaveWebMode = true;
+				}
+			}
+
+
+			if ( bSaveWebMode )
+			{
+				docWebMode.Save();
+			}
+			oAnswer.web_mode = create_web_mode( null, teWebMode, true );
+
+			var bSaveOverrideWebTemplates = false;
+			var xarrOverrideWebTemplates = [];
+			if ( bChange && sLastCode != "" )
+			{
+				xarrOverrideWebTemplates = tools.xquery( "for $elem in override_web_templates where $elem/mode = " + XQueryLiteral( sLastCode ) + " return $elem/id, $elem/__data" );
+				for ( catOverrideWebTemplateElem in xarrOverrideWebTemplates )
+				{
+					docOverrideWebTemplate = OpenDoc( UrlFromDocID( catOverrideWebTemplateElem.id ) );
+					if ( docOverrideWebTemplate.TopElem.mode != sNewCode || docOverrideWebTemplate.TopElem.access.enable_anonymous_access != bEnableAnonymousAccess )
+					{
+						docOverrideWebTemplate.TopElem.mode = sNewCode;
+						docOverrideWebTemplate.TopElem.access.enable_anonymous_access = bEnableAnonymousAccess;
+						docOverrideWebTemplate.Save();
+						bSaveOverrideWebTemplates = true;
+					}
+				}
+			}
+
+			var arrZones = oWebMode.GetOptProperty( "zones", [] );
+			if ( ArrayCount( arrZones ) == 0 )
+			{
+				break;
+			}
+
+			if ( sNewCode == "" )
+			{
+				sNewCode = sLastCode;
+			}
+			if ( sNewCode != "" )
+			{
+				xarrOverrideWebTemplates = ArraySelectAll( XQuery( "for $elem in override_web_templates where $elem/mode = " + XQueryLiteral( sNewCode ) + " and MatchSome( $elem/zone, (" + ArrayMerge( arrZones, "CodeLiteral(This.name)", "," ) + ") ) return $elem/Fields('id','zone','custom_web_template_id','parent_id')" ) );
+				for ( oZoneElem in arrZones )
+				{
+					xarrZoneOverrideWebTemplates = ArraySelect( xarrOverrideWebTemplates, "!This.parent_id.HasValue&&This.zone==" + CodeLiteral( oZoneElem.name ) );
+					if ( create_templates( oZoneElem, null, xarrZoneOverrideWebTemplates, xarrOverrideWebTemplates, teWebMode ) )
+					{
+						bSaveOverrideWebTemplates = true;
+					}
+				}
+			}
+
+			if ( bSaveOverrideWebTemplates )
+			{
+				tools_web.drop_active_web_templates();
+			}
+
+			oAnswer.web_mode.zones = arrZones;
+			break;
+		}
+
+
+		case "save_web_mode_templates":
+		{
+			var oWebMode = oAction.GetProperty( "web_mode" );
+			var arrZones = oWebMode.GetOptProperty( "zones", [] );
+			for ( oZoneElem in arrZones )
+			{
+				save_templates( oZoneElem );
+			}
+			break;
+		}
+
+
+		case "delete_web_mode":
+		{
+			if ( teWebMode.is_std || ! tools_lp.check_access_lpe( curUser ) )
+			{
+				return_error( 401, "Access denied." );
+			}
+
+			if ( teWebMode.code.HasValue )
+			{
+				xarrRoles = XQuery( "for $elem in roles where $elem/code = 'widgets' or $elem/code = 'macros' return $elem/Fields('id')" );
+				xarrCustomWebTemplates = XQuery( "for $elem in custom_web_templates where MatchSome( $elem/role_id, (" + ArrayMerge( xarrRoles, "id", "," ) + ") ) return $elem/Fields('id')" );
+				xarrOverrideWebTemplates = ArraySelectAll( XQuery( "for $elem in override_web_templates where $elem/mode = " + XQueryLiteral( teWebMode.code ) + " and MatchSome( $elem/custom_web_template_id, (" + ArrayMerge( xarrCustomWebTemplates, "id", "," ) + ") ) return $elem/Fields('id')" ) );
+				for ( catOverrideWebTemplateElem in xarrOverrideWebTemplates )
+				{
+					DeleteDoc( UrlFromDocID( catOverrideWebTemplateElem.id ) );
+				}
+			}
+			oAnswer.web_mode_id = teWebMode.id.XmlValue;
+			DeleteDoc( UrlFromDocID( iWebModeID ) );
+			break;
+		}
+
+
+		case "get_collection_list":
+		{
+			var sCatalogName = oAction.GetOptProperty( "catalog_name", "" );
+			oAnswer.collections = fnGetActions( sCatalogName, "remote_collection" );
+			break;
+		}
+
+
+		case "get_object_field_list":
+		{
+			var sCatalogName = oAction.GetOptProperty( "catalog_name", "" );
+			oAnswer.object_fields = fnGetObjectFields(sCatalogName);
+			break;
+		}
+
+
+		case "get_collection":
+		{
+			var iCollectionID = Int( oAction.GetProperty( "object_id" ) );
+			oAnswer.collection = fnGetAction( iCollectionID );
+			break;
+		}
+
+
+		case "get_action":
+		{
+			var iActionID = Int( oAction.GetProperty( "object_id" ) );
+			oAnswer.action = fnGetAction( iActionID );
+			break;
+		}
+
+		case "get_action_list":
+		{
+			var sCatalogName = oAction.GetOptProperty( "catalog_name", "" );
+			oAnswer.actions = fnGetActions( sCatalogName, "remote_action" );
+			break;
+		}
+		case "upload_chunk":
+		{
+			oResUpload = tools.call_code_library_method( "libMain", "UploadFile", [ Request, false ] );
+			break;
+		}
+
+		case "eval_action":
+		{
+			oResUpload = tools.call_code_library_method( "libMain", "UploadFile", [ Request, false ] );
+			var iRemoteActionID = Int( oAction.GetProperty( "remote_action_id" ) );
+			var sCommand = oAction.GetOptProperty( "command", "eval" );
+			var oFormFields = oAction.GetOptProperty( "form_fields", [] );
+			var arrWvars = oAction.GetOptProperty( "wvars" );
+			var sPageUrl = oAction.GetOptProperty( "page_url", "" );
+/*
+OUTPUT ENCODING
+			var sFldType;
+			for ( oField1 in oFormFields )
+			{
+				sFldType = oField1.GetOptProperty("type");
+				if(sFldType=="string")
+				{
+					oField1.value = tools_web.convert_xss(oField1.value);
+				}
+				else if(sFldType=="array")
+				{
+					for(aArrayUnit in oField1.value)
+					{
+						for(oField2 in aArrayUnit)
+						{
+							sFldType = oField2.GetOptProperty("type");
+							if(sFldType=="string")
+							{
+								oField2.value = tools_web.convert_xss(oField2.value);
+							}
+						}
+					}
+				}
+			}
+*/
+			var arrFileFields = ArraySelect( oFormFields, "This.GetOptProperty('type')=='file'" );
+			if ( ArrayCount( arrFileFields ) != 0 )
+			{
+				var oRes = new Object();
+				var aSecInfo = tools.call_code_library_method( "libMain", "_read_postmultipart_file_info", [ Request.Header.GetOptProperty( "Content-Type", "" ), Request.Body ] );
+				var oUpConfig = tools.call_code_library_method( "libMain", "_get_config", [] );
+
+				for ( oFileFieldElem in arrFileFields )
+				{
+					sFileGuid = oFileFieldElem.GetOptProperty( "file_id", "" );
+					if( sFileGuid != "" )
+					{
+						sFileNameGuid = oFileFieldElem.GetOptProperty( "file_name", "" );
+						oResJoin = tools.call_code_library_method( "libMain", "JoinChunk", [ sFileGuid, sFileNameGuid, OptInt( oFileFieldElem.GetOptProperty( "file_size" ), 0 ), OptInt( oFileFieldElem.GetOptProperty("chunks_total"), 0 ) ] );
+						if( !oResJoin.Success )
+						{
+							oFileFieldElem.SetProperty( "error", 1 );
+							oFileFieldElem.SetProperty( "errorText", oResJoin.Message );
+							continue;
+						}
+						oFileFieldElem.SetProperty( "value", sFileNameGuid );
+						oFileFieldElem.SetProperty( "url", oResJoin.Result );
+					}
+					else
+					{
+						sFileFieldNameElem = oFileFieldElem.GetProperty( "name" );
+						oFile = Request.Query.GetOptProperty( sFileFieldNameElem );
+						if ( oFile == undefined || oFile == "undefined" )
+						{
+							continue;
+						}
+
+						sFileName = oFile.FileName;
+						oFileFieldElem.SetProperty( "value", sFileName );
+
+						if ( ! tools.call_code_library_method( "libMain", "_ruleCheck", [ oFile, curUserID, curUser, aSecInfo, oUpConfig, oRes ] ) )
+						{
+							oFileFieldElem.SetProperty( "error", oRes.GetOptProperty( "error", "" ) );
+							oFileFieldElem.SetProperty( "errorText", oRes.GetOptProperty( "errorText", "" ) );
+							continue;
+						}
+
+						sTempUrl = ObtainTempFile( UrlPathSuffix( sFileName ) );
+						PutUrlData( sTempUrl, ( "" + oFile.Value ) );
+						oFileFieldElem.SetProperty( "url", sTempUrl );
+					}
+				}
+			}
+
+			var teRemoteAction = OpenDoc( UrlFromDocID( iRemoteActionID ) ).TopElem;
+
+			if ( fnSetWvars( teRemoteAction, arrWvars ) )
+			{
+				var _vitem = ArrayOptFind( arrWvars, "This.name == '_ITEM_'" );
+				if ( _vitem != undefined )
+				{
+					var _vobj = ParseJson( _vitem.value );
+					if ( DataType( _vobj ) == "object" && ObjectType( _vobj ) == "JsObject" && _vobj.GetOptProperty( "ra_params", "" ) != null && _vobj.GetOptProperty( "ra_params", "" ) != "" )
+					{
+						var _vvobj = ParseJson( _vobj.GetProperty( "ra_params" ) );
+						if ( DataType( _vvobj ) == "object" && ObjectType( _vvobj ) == "JsObject" )
+						{
+							var arrWvarsV = [];
+							for ( _vv in _vvobj )
+							{
+								_vv1 = _vvobj.GetProperty( _vv );
+								if ( DataType( _vv1 ) == "object" && ObjectType( _vv1 ) == "JsObject" )
+								{
+									arrWvarsV.push( { name: _vv1.name, value: _vv1.value } );
+								}
+							}
+							fnSetWvars( teRemoteAction, arrWvarsV )
+						}
+					}
+				}
+			}
+			teRemoteAction.wvars.ObtainChildByKey( "command" ).value = sCommand;
+			teRemoteAction.wvars.ObtainChildByKey( "form_fields" ).value = EncodeJson( oFormFields );
+			teRemoteAction.wvars.ObtainChildByKey( "_remote_object_id" ).value = curObjectID;
+			teRemoteAction.wvars.ObtainChildByKey( "_remote_doc_id" ).value = curDocID;
+			teRemoteAction.wvars.ObtainChildByKey( "curObjectID" ).value = curObjectID;
+			teRemoteAction.wvars.ObtainChildByKey( "curUserID" ).value = curUserID;
+			teRemoteAction.wvars.ObtainChildByKey( "curPageUrl" ).value = sPageUrl;
+
+			var oResult = teRemoteAction.evaluate( "raw", Request );
+			if ( oResult.error == 0 )
+			{
+				oAnswer.result = oResult.result;
+			}
+			else
+			{
+				return_error( oResult.error, oResult.messageText );
+			}
+
+			for ( oFileFieldElem in ArraySelect( arrFileFields, "This.GetOptProperty('url','')!=''" ) )
+			{
+				try
+				{
+					DeleteUrl( oFileFieldElem.url );
+				}
+				catch ( err )
+				{
+				}
+			}
+			break;
+		}
+
+
+		case "get_fe_name":
+		{
+			var bFEMultiple = tools_web.is_true(oAction.GetOptProperty("multiple", false));
+			var sIds = oAction.GetOptProperty( "fe_id" );
+			var iFEID;
+			var teFE;
+			if(bFEMultiple)
+			{
+				oAnswer.values = [];
+				oAnswer.names = [];
+				var aIds = sIds.split(";");
+				for(i=0; i<aIds.length; i++)
+				{
+					oAnswer.values.push(aIds[i]);
+					iFEID = OptInt( aIds[i] );
+					if(iFEID==undefined)
+					{
+						oAnswer.names.push(aIds[i] + " - invalid ID");
+					}
+					else
+					{
+						try
+						{
+							teFE = OpenDoc( UrlFromDocID( iFEID ) ).TopElem;
+							oAnswer.names.push( String(  tools_web.get_cur_lng_name( tools.get_disp_name_value( teFE ), curLng.short_id ) ) );
+						}
+						catch(e)
+						{
+							oAnswer.names.push(String(iFEID) + " - element not found");
+						}
+					}
+				}
+			}
+			else
+			{
+				iFEID = OptInt( sIds );
+				if(iFEID==undefined)
+				{
+					oAnswer.name = (aIds[i] + " - invalid ID");
+				}
+				else
+				{
+					try
+					{
+						teFE = OpenDoc( UrlFromDocID( iFEID ) ).TopElem;
+						oAnswer.name = String( tools_web.get_cur_lng_name( tools.get_disp_name_value( teFE ), curLng.short_id ) );
+					}
+					catch(e)
+					{
+						oAnswer.name = (String(iFEID) + " - element not found");
+					}
+				}
+			}
+			break;
+		}
+
+
+		case "copy_web_mode":
+		{
+			var oWebMode = oAction.web_mode;
+			var sNewCode = oWebMode.GetOptProperty( "code", "" );
+
+			if ( iWebModeID == null )
+			{
+				return_error( 1, "Object ID is empty." );
+			}
+			if ( ! tools_lp.check_access_lpe( curUser ) )
+			{
+				return_error( 401, "Access denied." );
+			}
+			if ( sNewCode == "" )
+			{
+				return_error( 3, "WebMode Code is empty." );
+			}
+
+			var sLastCode = teWebMode.code.Value;
+			var bCodeExists = false;
+			if ( ArrayOptFirstElem( XQuery( "for $elem in web_modes where $elem/code = " + XQueryLiteral( sNewCode ) + " and $elem/id != " + iWebModeID + " return $elem/Fields('id')" ) ) != undefined )
+			{
+				bCodeExists = true;
+			}
+			else if ( sNewCode != sLastCode )
+			{
+				arrUsedWebModes = ArraySelectDistinct( override_web_templates, "mode" );
+				if ( ArrayOptFindByKey( arrUsedWebModes, sNewCode, "mode" ) != undefined )
+				{
+					bCodeExists = true;
+				}
+			}
+			if ( bCodeExists )
+			{
+				return_error( 2, "WebMode Code already exists." );
+			}
+
+			var docWebModeCopy = tools_lp.copy_web_mode( teWebMode, oWebMode );
+			fldFuncManager = docWebModeCopy.TopElem.func_managers.ObtainChildByKey( curUserID );
+			tools.common_filling( "collaborator", fldFuncManager, curUserID, curUser );
+			docWebModeCopy.Save();
+
+			oAnswer.web_mode = create_web_mode( null, docWebModeCopy.TopElem, true );
+			break;
+		}
+
+
+		default:
+		{
+			return_error( 403, "Unknown action." );
+			break;
+		}
+	}
+}
+catch( err )
+{
+	if ( ! IsCancelError( err ) )
+	{
+		alert( "lpapi.html " + err )
+		oAnswer.error = 500;
+		oAnswer.error_text = String( err );
+	}
+}
+
+if(sResponse == null)
+{
+	sResponse = EncodeJson( oAnswer, { ExportLargeIntegersAsStrings: true } );
+	//sResponse = tools.object_to_text( oAnswer, "json" );
+	if(bSaveTemplatesInCache)
+	{
+		tools_web.set_user_data(sTemplatesCacheKey, sResponse, 86400);
+	}
+}
+Response.Write( sResponse );
+
+//alert("LPAPI " + oAnswer.action_completed + " timing = " + (GetCurTicks() - i1));
+%>

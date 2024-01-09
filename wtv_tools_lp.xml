@@ -1,0 +1,3227 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<SPXML-INLINE-FORM>
+
+<tools_lp>
+
+	<check_access_lpe PROPERTY="1" PARAM="curUser" EXPR="
+			var bAccess = ms_tools.check_access_blocks_by_catalog_name( curUser.access.access_role.ForeignElem.access_blocs, 'web_mode', 'write' );
+			if ( ! bAccess )
+			{
+				var oContentAccess = tools.get_content_access( curUser.id.Value, curUser );
+				bAccess = ms_tools.check_content_access( oContentAccess, 'application', null, 'read' );
+			}
+			return bAccess;
+	"/>
+
+
+	<check_web_mode_link PROPERTY="1" PARAM="fldLinkParam" PARAM="Env" EXPR="
+			if ( fldLinkParam.conditions.ChildNum == 0 )
+			{
+				return true;
+			}
+
+			function replace_eval( sEval )
+			{
+				if( StrContains( sEval, 'curEnv.now') )
+				{
+					if(StrContains(sEval, 'curEnv.nowDate'))
+					{
+						sEval = StrReplace(sEval, 'curEnv.nowDate', 'Date()' );
+					}
+					else if(StrContains(sEval, 'curEnv.nowDateTime'))
+					{
+						sEval = StrReplace(sEval, 'curEnv.nowDateTime', 'Date()', true, true);
+					}
+					else if(StrContains(sEval, 'curEnv.nowDateString'))
+					{
+						sEval = StrReplace(sEval, 'curEnv.nowDateString', 'StrDate(Date())' );
+					}
+					else if(StrContains(sEval, 'curEnv.nowDateTimeString'))
+					{
+						sEval = StrContains(sEval, 'curEnv.nowDateTimeString', 'StrDate(Date())', true, true);
+					}
+					else if(StrContains(sEval, 'curEnv.nowTimeString'))
+					{
+						sEval = StrReplace(sEval, 'curEnv.nowTimeString', 'StrTime(Date())' );
+					}
+				}
+				else
+				{
+					sEval = StrReplace( sEval, 'Env.curEnv.', 'Env.' );
+					sEval = StrReplace( sEval, 'curEnv.', 'Env.' );
+					sEval = StrReplace( sEval, 'Env.curHost.', 'tools_web.get_cur_host(Env).' );
+					sEval = StrReplace( sEval, 'Env.curSite.', 'tools_web.get_cur_site(Env).' );
+					sEval = StrReplace( sEval, 'Env.curWebDesign.', 'tools_web.get_cur_web_design(Env).' );
+					sEval = StrReplace( sEval, 'Env.curWebMode.', 'tools_web.get_cur_web_mode(Env).' );
+					sEval = StrReplace( sEval, '.FE.', '.ForeignElem.' );
+				}
+				return sEval;
+			}
+
+			for ( fldConditionElem in fldLinkParam.conditions )
+			{
+				oField = undefined;
+				sType = null;
+				sField = tools.create_condition_field( fldConditionElem );
+				sField = replace_eval( sField );
+				try
+				{
+					//oField = SafeEval( sField, [{ 'Env': Env }] );
+					oField = eval( sField );
+				}
+				catch ( err )
+				{
+				}
+				if ( oField != undefined )
+				{
+					try
+					{
+						sType = oField.Type;
+					}
+					catch ( err )
+					{
+					}
+					if ( sType == null )
+					{
+						sType = DataType( RValue( oField ) );
+					}
+					if ( common.spxml_types.ChildByKeyExists( sType ) )
+					{
+						fldConditionElem.type = sType;
+					}
+				}
+			}
+
+			var sEval = Trim ( tools.create_filter_javascript( fldLinkParam.conditions, null ) );
+			sEval = replace_eval( sEval );
+
+			var bRes = false;
+			try
+			{
+				//bRes = SafeEval( sEval, [{ 'Env': Env }] );
+				bRes = eval( sEval );
+			}
+			catch ( err )
+			{
+				alert( err );
+			}
+			return bRes;
+	"/>
+	<check_web_mode_disp PROPERTY="1" PARAM="curWebModeParam" PARAM="curOverrideWebTemplateIDParam" PARAM="Env" EXPR="
+			if ( curWebModeParam == null )
+			{
+				return true;
+			}
+			var bRes = true;
+			for( fldTemplateLinkElem in ArraySelectByKey( curWebModeParam.template_links, curOverrideWebTemplateIDParam, 'target_template_id' ) )
+			{
+				if ( fldTemplateLinkElem.type == 'hide' )
+				{
+					if ( tools_lp.check_web_mode_link( fldTemplateLinkElem, Env ) )
+					{
+						bRes = false;
+						break;
+					}
+				}
+				else if ( fldTemplateLinkElem.type == 'show' )
+				{
+					if ( ! tools_lp.check_web_mode_link( fldTemplateLinkElem, Env ) )
+					{
+						bRes = false;
+						break;
+					}
+				}
+			}
+			return bRes;
+	"/>
+
+
+	<fill_context PROPERTY="1" PARAM="xarrStatisticRecsParam" PARAM="bIsObject" PARAM="Env" PARAM="teWebModeParam" EXPR="
+			var aFlds_get_context = [];
+			var oStatisticData_get_context, oField_get_context, catStatisticRecElem_get_context, teStatisticRec_get_context;
+			var curObject_get_context = null;
+			var curUser_get_context = null;
+			var bTimingAlert = global_settings.settings.GetOptProperty('tracing', false);
+			if(bTimingAlert)
+				EnableLog('tracing');
+			var curTick;
+			try
+			{
+				teWebModeParam.Name;
+			}
+			catch( err )
+			{
+				teWebModeParam = null;
+			}
+			if ( bIsObject )
+			{
+				try
+				{
+					curObject_get_context = Env.GetOptProperty( 'curObject', null );
+					curUser_get_context = Env.GetOptProperty( 'curUser', null );
+				}
+				catch ( err )
+				{
+				}
+			}
+			var curTempObject_get_context;
+			for ( catStatisticRecElem_get_context in xarrStatisticRecsParam )
+			{
+				teStatisticRec_get_context = OpenDoc( UrlFromDocID( catStatisticRecElem_get_context.id ) ).TopElem;
+				if( teWebModeParam != null )
+				{
+					catStatisticRecElem_te_web_mode = teWebModeParam.statistic_recs.GetOptChildByKey( catStatisticRecElem_get_context.id );
+					if( catStatisticRecElem_te_web_mode != undefined )
+					{
+						for( _wvar_web_mode in catStatisticRecElem_te_web_mode.wvars )
+						{
+							_child_wvar = teStatisticRec_get_context.wvars.ObtainChildByKey( _wvar_web_mode.name );
+							_child_wvar.value = _wvar_web_mode.value
+						}
+					}
+				}
+				oField_get_context = ({
+					id: teStatisticRec_get_context.id.Value,
+					name: teStatisticRec_get_context.code.Value,
+					type: teStatisticRec_get_context.informer.output_type.Value,
+					title: teStatisticRec_get_context.name.Value,
+					desc: teStatisticRec_get_context.comment.Value
+				});
+				if ( bIsObject )
+				{
+					curObjectFunc_get_context = curObject_get_context;
+					if ( curObject_get_context == null &amp;&amp; teStatisticRec_get_context.catalog_name == 'collaborator' )
+					{
+						curObjectFunc_get_context = curUser_get_context;
+					}
+
+
+					curTick = GetCurTicks();
+					oStatisticData_get_context = teStatisticRec_get_context.calculate_context( curObjectFunc_get_context, Env );
+					if(bTimingAlert)
+						LogEvent('tracing','STATISTIC_REC ' + teStatisticRec_get_context.code.Value + ' (' +  teStatisticRec_get_context.id.Value + ') = ' + (GetCurTicks() - curTick)) + 'ms';
+					if ( oStatisticData_get_context.error != 0 )
+					{
+						continue;
+					}
+					oField_get_context.SetProperty( 'value', oStatisticData_get_context.GetOptProperty( 'value', null ) );
+					oField_get_context.SetProperty( 'value_str', oStatisticData_get_context.GetOptProperty( 'value_str', '' ) );
+				}
+				aFlds_get_context.push( oField_get_context );
+			}
+			return aFlds_get_context;
+	"/>
+	<get_context PROPERTY="1" PARAM="sCatalogName" PARAM="bIsObject" PARAM="Env" EXPR="
+			var xarrStatisticRecs = tools.xquery( 'for $elem in statistic_recs where MatchSome( $elem/catalog, (' + XQueryLiteral( sCatalogName ) + ') ) and $elem/context_calc = true() return $elem/id, $elem/__data' );
+			return tools_lp.fill_context( xarrStatisticRecs, bIsObject, Env );
+	"/>
+	<get_web_mode_context PROPERTY="1" PARAM="teWebModeParam" PARAM="Env" PARAM="arrContextCodesParam" EXPR="
+			try
+			{
+				arrContextCodesParam;
+			}
+			catch ( err )
+			{
+				arrContextCodesParam = null;
+			}
+			if ( arrContextCodesParam == null )
+			{
+				if ( ArrayCount( teWebModeParam.statistic_recs ) == 0 )
+				{
+					return [];
+				}
+				var xarrStatisticRecs = tools.xquery( 'for $elem in statistic_recs where MatchSome( $elem/id, (' + ArrayMerge( teWebModeParam.statistic_recs, 'statistic_rec_id', ',' ) + ') ) return $elem/id, $elem/__data' );
+			}
+			else
+			{
+				if ( ArrayCount( arrContextCodesParam ) == 0 )
+				{
+					return [];
+				}
+				var xarrStatisticRecs = tools.xquery( 'for $elem in statistic_recs where MatchSome( $elem/code, (' + ArrayMerge( arrContextCodesParam, 'XQueryLiteral( This )', ',' ) + ') ) return $elem/id, $elem/__data' );
+			}
+			return tools_lp.fill_context( xarrStatisticRecs, true, Env, teWebModeParam );
+	"/>
+
+	<substitute PROPERTY="1" PARAM="sTextParam" PARAM="Env" PARAM="bLPE" PARAM="bLPEPreview" EXPR="
+			var sText = sTextParam;
+			var aLocal = [];
+			var aFlds = [];
+			if(Env != undefined)
+			{
+				var aRestricted = [ 'password' ];
+				if(StrContains(sText, '{{') &amp;&amp; StrContains(sText, '}}'))
+				{
+					var bIsLPE = false;
+					try
+					{
+						bIsLPE = bLPE;
+					}
+					catch (e) {}
+					var objRegExp = tools_web.reg_exp_init();
+					objRegExp.Global = true;
+					objRegExp.IgnoreCase = true;
+					objRegExp.MultiLine = false;
+					objRegExp.Pattern = '\{{2}([^}]+)\}{2}';
+					var oMatches = objRegExp.Execute(sText);
+					var sString;
+					var sProp;
+					var sValue;
+					var dValue;
+					var sStripped;
+					var aParts = [];
+					var teFE;
+					var oProp;
+					var oFEProp;
+					var oCurUser;
+					var oCurObject;
+					var oCurContext;
+					var oCurWebDesign;
+					var oLngEnv = tools_web.get_cur_lng_obj( Env );
+					var oCurLng = oLngEnv.curLng;
+					var oObj;
+					var sSecondPart;
+					var bB64 = false;
+					var bDate = false;
+					var bDateTime = false;
+					var bDateTimeSec = false;
+					var bHTML = false;
+					var bCode = false;
+					var sXString;
+					var bRichText;
+					for(var i=0; i &lt; oMatches.Count; i++)
+					{
+						sValue = undefined;
+						bRichText = false;
+						sXString = String(oMatches.Item(i));
+						bB64 = (StrBegins(sXString,'{{B64:'));
+						bDate = (StrBegins(sXString,'{{DATE:'));
+						bDateTime = (StrBegins(sXString,'{{DATETIME:'));
+						bDateTimeSec = (StrBegins(sXString,'{{DATETIMESEC:'));
+						bHTML = (StrBegins(sXString,'{{HTML:'));
+						bCode = (StrBegins(sXString,'{{CODE:'));
+						if(bB64)
+						{
+							sString = StrReplace(sXString, '{{B64:', '{{');
+						}
+						else if(bDate)
+						{
+							sString = StrReplace(sXString, '{{DATE:', '{{');
+						}
+						else if(bDateTime)
+						{
+							sString = StrReplace(sXString, '{{DATETIME:', '{{');
+						}
+						else if(bDateTimeSec)
+						{
+							sString = StrReplace(sXString, '{{DATETIMESEC:', '{{');
+						}
+						else if(bHTML)
+						{
+							sString = StrReplace(sXString, '{{HTML:', '{{');
+						}
+						else if(bCode)
+						{
+							sString = StrReplace(sXString, '{{CODE:', '{{');
+						}
+						else
+						{
+							sString = sXString;
+						}
+						sStripped = StrReplace(sString, '{', '');
+						sStripped = StrReplace(sStripped, '}', '');
+						aParts = sStripped.split('.');
+						switch(aParts[0])
+						{
+							case 'curDoc':
+							{
+								oCurDoc = Env.GetOptProperty('curDoc', null);
+								if(aParts.length &gt; 1 &amp;&amp; oCurDoc != null)
+								{
+									if(aParts[1]!='' &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + aParts[1] + '\'')==undefined)
+									{
+										oProp = oCurDoc.OptChild(aParts[1]);
+										if(oProp!=undefined)
+										{
+											if(aParts.length &gt; 2)
+											{
+												if(aParts[2]=='FE' || aParts[2]=='ForeignElem')
+												{
+													if(aParts.length &gt; 3)
+													{
+														if(aParts[3]!='')
+														{
+															teFE = oProp.OptForeignElem;
+															if(teFE!=undefined)
+															{
+																oFEProp = teFE.OptChild(aParts[3]);
+																if(oFEProp!=undefined &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + aParts[3] + '\'')==undefined)
+																{
+																	sValue = RValue(teFE.GetOptProperty(aParts[3]));
+																	if(aParts[3]=='text_area' || aParts[3]=='desc' || aParts[3]=='description')
+																	{
+																		//sValue = tools_web.convert_bbcode_to_html(sValue);
+																		bRichText = true;
+																	}
+																	else
+																	{
+																		if(bHTML)
+																		{
+																			bRichText = true;
+																		}
+																		else if(!bCode)
+																		{
+																			sValue = tools_web.convert_xss(sValue);
+																		}
+																	}
+																}
+															}
+														}
+													}
+												}
+											}
+											else
+											{
+												sValue = RValue(oCurDoc.GetOptProperty(aParts[1]));
+												if(aParts[1]=='text_area' || aParts[1]=='desc' || aParts[1]=='description')
+												{
+													//sValue = tools_web.convert_bbcode_to_html(sValue);
+													bRichText = true;
+												}
+												else
+												{
+													if(bHTML)
+													{
+														bRichText = true;
+													}
+													else if(!bCode)
+													{
+														sValue = tools_web.convert_xss(sValue);
+													}
+												}
+											}
+											if(sValue!=undefined &amp;&amp; oCurLng!=null)
+											{
+												sValue = tools_web.get_cur_lng_name( sValue, oCurLng.short_id);
+												if(StrContains(sValue, 'compound'))
+												{
+													sValue = tools_web.get_web_desc( sValue, ({'mode':'data'}) );
+												}
+											}
+										}
+									}
+								}
+								break;
+							}
+							case 'curEnv':
+							{
+								if(aParts.length &gt; 1)
+								{
+									sSecondPart = StrLowerCase(aParts[1]);
+									if(sSecondPart!='' &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + sSecondPart + '\'')==undefined)
+									{
+										switch(sSecondPart)
+										{
+											case 'curwebdesign':
+											{
+												oCurWebDesign = tools_web.get_cur_web_design( Env );
+												if(aParts.length &gt; 2 &amp;&amp; oCurWebDesign != null)
+												{
+													switch(StrLowerCase(aParts[2]))
+													{
+														case 'code':
+														{
+															sValue = oCurWebDesign.GetOptProperty('code');
+															break;
+														}
+														case 'name':
+														{
+															sValue = oCurWebDesign.GetOptProperty('name');
+															break;
+														}
+													}
+												}
+												break;
+											}
+											case 'curlng':
+											{
+												if(aParts.length &gt; 2 &amp;&amp; oCurLng != null)
+												{
+													switch(StrLowerCase(aParts[2]))
+													{
+														case 'id':
+														{
+															sValue = oCurLng.GetOptProperty('id');
+															break;
+														}
+														case 'short_id':
+														{
+															sValue = oCurLng.GetOptProperty('short_id');
+															break;
+														}
+														case 'name':
+														{
+															sValue = oCurLng.GetOptProperty('name');
+															break;
+														}
+													}
+												}
+												break;
+											}
+											case 'curhost':
+											{
+												var oCurHost = tools_web.get_cur_host( Env );
+												if(aParts.length &gt; 2 &amp;&amp; oCurHost != null)
+												{
+													switch(StrLowerCase(aParts[2]))
+													{
+														case 'id':
+														{
+															sValue = oCurHost.GetOptProperty('id');
+															break;
+														}
+														case 'code':
+														{
+															sValue = oCurHost.GetOptProperty('code');
+															break;
+														}
+														case 'name':
+														{
+															sValue = Env.GetOptProperty('curHostName');
+															break;
+														}
+														case 'port':
+														{
+															sValue = oCurHost.GetOptProperty('port');
+															break;
+														}
+														case 'hostname':
+														{
+															sValue = oCurHost.GetOptProperty('hostname');
+															break;
+														}
+														case 'path':
+														{
+															sValue = Env.GetOptProperty('curHostPath');
+															break;
+														}
+														case 'portal_auth_type':
+														{
+															sValue = String(oCurHost.GetOptProperty('portal_auth_type'));
+															break;
+														}
+													}
+												}
+												break;
+											}
+											case 'cursite':
+											{
+												var oCurSite = tools_web.get_cur_site(Env);
+												if(aParts.length &gt; 2 &amp;&amp; oCurSite != null)
+												{
+													switch(StrLowerCase(aParts[2]))
+													{
+														case 'id':
+														{
+															sValue = Env.GetOptProperty('curSiteID');
+															break;
+														}
+														case 'code':
+														{
+															sValue = oCurSite.GetOptProperty('code');
+															break;
+														}
+														case 'name':
+														{
+															sValue = oCurSite.GetOptProperty('name');
+															break;
+														}
+														case 'object_type':
+														{
+															sValue = oCurSite.GetOptProperty('object_type');
+															break;
+														}
+														case 'object_id':
+														{
+															sValue = oCurSite.GetOptProperty('object_id');
+															break;
+														}
+													}
+												}
+												break;
+											}
+											case 'curdevice':
+											{
+												var oCurDevice = Env.GetOptProperty('curDevice', null);
+												if(aParts.length &gt; 2 &amp;&amp; oCurDevice != null)
+												{
+													switch(StrLowerCase(aParts[2]))
+													{
+														case 'type':
+														{
+															sValue = oCurDevice.GetOptProperty('type');
+															break;
+														}
+													}
+												}
+												break;
+											}
+											case 'curenvurl':
+											{
+												sValue = tools_web.get_cur_env_url( Env );
+												break;
+											}
+											case 'nowdate':
+											{
+												sValue = StrXmlDate(Date());
+												break;
+											}
+											case 'nowdatetime':
+											{
+												sValue = StrXmlDate(Date(), true, true);
+												break;
+											}
+											case 'nowdatestring':
+											{
+												sValue = StrDate(Date());
+												break;
+											}
+											case 'nowdatetimestring':
+											{
+												sValue = StrDate(Date(), true, true);
+												break;
+											}
+											case 'nowtimestring':
+											{
+												sValue = StrTime(Date());
+												break;
+											}
+										}
+									}
+								}
+								break;
+							}
+							case 'curUser':
+							{
+								oCurUser = Env.GetOptProperty('curUser', null);
+								oCurLng = Env.GetOptProperty('curLng', null);
+								if(aParts.length &gt; 1 &amp;&amp; oCurUser!=null)
+								{
+									if(aParts[1]!='' &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + aParts[1] + '\'')==undefined)
+									{
+										oProp = oCurUser.OptChild(aParts[1]);
+										if(oProp!=undefined)
+										{
+											if(aParts.length &gt; 2)
+											{
+												if(aParts[2]=='FE' || aParts[2]=='ForeignElem')
+												{
+													if(aParts.length &gt; 3)
+													{
+														if(aParts[3]!='')
+														{
+															teFE = oProp.OptForeignElem;
+															if(teFE!=undefined)
+															{
+																oFEProp = teFE.OptChild(aParts[3]);
+																if(oFEProp!=undefined &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + aParts[3] + '\'')==undefined)
+																{
+																	sValue = RValue(teFE.GetOptProperty(aParts[3]));
+																	if(aParts[3]=='text_area' || aParts[3]=='desc' || aParts[3]=='description')
+																	{
+																		//sValue = tools_web.convert_bbcode_to_html(sValue);
+																		bRichText = true;
+																	}
+																	else
+																	{
+																		if(bHTML)
+																		{
+																			bRichText = true;
+																		}
+																		else if(!bCode)
+																		{
+																			sValue = tools_web.convert_xss(sValue);
+																		}
+																	}
+																}
+															}
+														}
+													}
+												}
+											}
+											else
+											{
+												sValue = RValue(oCurUser.GetOptProperty(aParts[1]));
+												if(aParts[1]=='text_area' || aParts[1]=='desc' || aParts[1]=='description')
+												{
+													//sValue = tools_web.convert_bbcode_to_html(sValue);
+													bRichText = true;
+												}
+												else
+												{
+													if(bHTML)
+													{
+														bRichText = true;
+													}
+													else if(!bCode)
+													{
+														sValue = tools_web.convert_xss(sValue);
+													}
+												}
+											}
+											if(sValue!=undefined &amp;&amp; oCurLng!=null)
+											{
+												sValue = tools_web.get_cur_lng_name( sValue, oCurLng.short_id);
+												if(StrContains(sValue, 'compound'))
+												{
+													sValue = tools_web.get_web_desc( sValue, ({'mode':'data'}) );
+												}
+											}
+										}
+									}
+								}
+								break;
+							}
+							case 'curObject':
+							{
+								oCurObject = Env.GetOptProperty('curObject', null);
+								if(aParts.length &gt; 1 &amp;&amp; oCurObject!=null)
+								{
+									if(aParts[1]!='' &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + aParts[1] + '\'')==undefined)
+									{
+										oProp = oCurObject.OptChild(aParts[1]);
+										if(oProp!=undefined)
+										{
+											if(aParts.length &gt; 2)
+											{
+												if(aParts[2]=='FE' || aParts[2]=='ForeignElem')
+												{
+													if(aParts.length &gt; 3)
+													{
+														if(aParts[3]!='')
+														{
+															teFE = oProp.OptForeignElem;
+															if(teFE!=undefined)
+															{
+																oFEProp = teFE.OptChild(aParts[3]);
+																if(oFEProp!=undefined &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + aParts[3] + '\'')==undefined)
+																{
+																	sValue = RValue(teFE.GetOptProperty(aParts[3]));
+																	if(aParts[3]=='text_area' || aParts[3]=='desc' || aParts[3]=='description')
+																	{
+																		//sValue = tools_web.convert_bbcode_to_html(sValue);
+																		bRichText = true;
+																	}
+																	else
+																	{
+																		if(bHTML)
+																		{
+																			bRichText = true;
+																		}
+																		else if(!bCode)
+																		{
+																			sValue = tools_web.convert_xss(sValue);
+																		}
+																	}
+																}
+															}
+														}
+													}
+												}
+											}
+											else
+											{
+												sValue = RValue(oCurObject.GetOptProperty(aParts[1]));
+												if(aParts[1]=='text_area' || aParts[1]=='desc' || aParts[1]=='description')
+												{
+													//sValue = tools_web.convert_bbcode_to_html(sValue);
+													bRichText = true;
+												}
+												else
+												{
+													if(bHTML)
+													{
+														bRichText = true;
+													}
+													else if(!bCode)
+													{
+														sValue = tools_web.convert_xss(sValue);
+													}
+												}
+											}
+											if(sValue!=undefined &amp;&amp; oCurLng!=null)
+											{
+												sValue = tools_web.get_cur_lng_name( sValue, oCurLng.short_id);
+												if(StrContains(sValue, 'compound'))
+												{
+													sValue = tools_web.get_web_desc( sValue, ({'mode':'data'}) );
+												}
+											}
+										}
+									}
+								}
+								break;
+							}
+							case 'curContext':
+							{
+								oCurContext = Env.GetOptProperty( 'curContext', null );
+								if(oCurContext != null)
+								{
+									for(oElem in oCurContext)
+									{
+										if( oElem.HasProperty('name') )
+										{
+											if(oElem.name == aParts[1])
+											{
+												sValue = ((oElem.GetOptProperty('value_str') != undefined) ? oElem.value_str : oElem.value);
+												if(aParts.length &gt; 2)
+												{
+													try
+													{
+														oObj = ParseJson( sValue );
+														if( oObj.GetOptProperty(aParts[2]) != undefined )
+														{
+															sValue = RValue( oObj[ aParts[2] ] );
+														}
+														else
+														{
+															sValue = undefined;
+														}
+													}
+													catch(e)
+													{
+														sValue = undefined;
+													}
+												}
+												if(sValue!=undefined &amp;&amp; oCurLng!=null)
+												{
+													sValue = tools_web.get_cur_lng_name( sValue, oCurLng.short_id);
+												}
+												if(bHTML)
+												{
+													bRichText = true;
+												}
+												else if(!bCode)
+												{
+													sValue = tools_web.convert_xss(sValue);
+												}
+												break;
+											}
+										}
+									}
+								}
+								break;
+							}
+							case 'LOCAL':
+							{
+								if(aParts.length &gt; 1)
+								{
+									aLocal.push(aParts[1]);
+									sRep = '&lt;var ';
+									if(bB64)
+									{
+										sRep += 'wt-b64=&quot;1&quot; ';
+									}
+									sRep += 'wt-var-local=&quot;' + aParts[1] + '&quot;&gt;&lt;/var&gt;';
+									sText = StrReplace(sText, sXString, sRep);
+								}
+								break;
+							}
+							case 'FIELD':
+							{
+								if(aParts.length &gt; 1)
+								{
+									aFlds.push(aParts[1]);
+									sRep = '&lt;var ';
+									if(bB64)
+									{
+										sRep += 'wt-b64=&quot;1&quot; ';
+									}
+									sRep += 'wt-var-fld=&quot;' + aParts[1] + '&quot;&gt;&lt;/var&gt;';
+									sText = StrReplace(sText, sXString, sRep);
+								}
+								break;
+							}
+							case 'ITEM':
+							{
+								break;
+							}
+						}
+						if(sValue!=undefined)
+						{
+							if(bDate)
+							{
+								if(DataType(sValue)=='date')
+								{
+									sValue = StrDate(sValue, false);
+								}
+								else
+								{
+									dValue = OptDate(sValue);
+									if(dValue!=undefined)
+									{
+										sValue = StrDate(dValue, false);
+									}
+								}
+							}
+							else if(bDateTime)
+							{
+								if(DataType(sValue)=='date')
+								{
+									sValue = StrDate(sValue, true, false);
+								}
+								else
+								{
+									dValue = OptDate(sValue);
+									if(dValue!=undefined)
+									{
+										sValue = StrDate(dValue, true, false);
+									}
+								}
+							}
+							else if(bDateTimeSec)
+							{
+								if(DataType(sValue)=='date')
+								{
+									sValue = StrDate(sValue, true);
+								}
+								else
+								{
+									dValue = OptDate(sValue);
+									if(dValue!=undefined)
+									{
+										sValue = StrDate(dValue, true, true);
+									}
+								}
+							}
+							if(bRichText)
+							{
+								sValue = 'B64___' + Base64Encode(sValue) + '___B64';
+							}
+							sText = (bB64 ? StrReplace(sText, sXString, Base64Encode(sValue)) : StrReplace(sText, sXString, sValue));
+						}
+						else if( !bIsLPE &amp;&amp; aParts[0]!='LOCAL' &amp;&amp; aParts[0]!='FIELD' &amp;&amp; aParts[0]!='ITEM')
+						{
+							sText = StrReplace(sText, sString, '');
+						}
+					}
+				}
+			}
+			return { sText: sText, aLocal: aLocal, aFlds: aFlds };
+	"/>
+	<cleanup_locals PROPERTY="1" PARAM="sTextParam" EXPR="
+			var sText = sTextParam;
+			if(StrContains(sText, '{{') &amp;&amp; StrContains(sText, '}}'))
+			{
+				var objRegExp = tools_web.reg_exp_init();
+				objRegExp.Global = true;
+				objRegExp.IgnoreCase = true;
+				objRegExp.MultiLine = false;
+				objRegExp.Pattern = '\{{2}([^}]+)\}{2}';
+				var oMatches = objRegExp.Execute(sText);
+				var sString;
+				var sStripped;
+				var aParts = [];
+				for(var i=0; i &lt; oMatches.Count; i++)
+				{
+					sString = String(oMatches.Item(i));
+					sStripped = StrReplace(sString, '{', '');
+					sStripped = StrReplace(sStripped, '}', '');
+					aParts = sStripped.split('.');
+					if(aParts[0]=='LOCAL' || aParts[0]=='FIELD')
+					{
+						sText = StrReplace(sText, sString, '');
+					}
+				}
+			}
+			return sText;
+	"/>
+
+
+
+	<fld_to_arr PROPERTY="1" PARAM="fldParam" EXPR="
+			var arr = [];
+			for ( fldElem in fldParam )
+			{
+				arr.push( tools_lp.fld_to_obj( fldElem ) );
+			}
+			return arr;
+	"/>
+
+	<fld_to_obj PROPERTY="1" PARAM="fldParam" EXPR="
+			var obj = ({});
+			for ( fldElem in fldParam )
+			{
+				if ( fldElem.IsTemp )
+					continue;
+
+				if ( fldElem.Type == '' )
+				{
+					bIsMultiple = false;
+					for ( fldFormElem in fldElem.FormElem )
+					{
+						bIsMultiple = fldFormElem.IsMultiple;
+						break;
+					}
+					if ( bIsMultiple )
+					{
+						obj.SetProperty( fldElem.Name, tools_lp.fld_to_arr( fldElem ) );
+					}
+					else
+					{
+						obj.SetProperty( fldElem.Name, tools_lp.fld_to_obj( fldElem ) );
+					}
+				}
+				else
+				{
+					switch ( fldElem.Type )
+					{
+						case 'string':
+						case 'bool':
+						{
+							obj.SetProperty( fldElem.Name, fldElem.Value );
+							break;
+						}
+						default:
+						{
+							obj.SetProperty( fldElem.Name, fldElem.XmlValue );
+							break;
+						}
+					}
+				}
+			}
+			try
+			{
+				if ( fldParam.ChildExists( 'value' ) && fldParam.value.HasValue )
+				{
+					if ( fldParam.type == 'file' || fldParam.type == 'foreign_elem' )
+					{
+						obj.title = String( tools.get_disp_name_value( OpenDoc( UrlFromDocID( Int( fldParam.value ) ) ).TopElem ) );
+					}
+					else if ( fldParam.type == 'object' )
+					{
+						arrForeignEntrys = [];
+						for ( fldEntryElem in fldParam.entries )
+						{
+							if ( fldEntryElem.type == 'file' || fldEntryElem.type =='foreign_elem' )
+							{
+								arrForeignEntrys.push( fldEntryElem.id.Value )
+							}
+						}
+						if ( ArrayCount( arrForeignEntrys ) != 0 )
+						{
+							bSave = false;
+							oParamValue = ParseJson( fldParam.value );
+							for ( oValueElem in oParamValue )
+							{
+								for ( sFieldNameElem in arrForeignEntrys )
+								{
+									try
+									{
+										sTitle = String( tools.get_disp_name_value( OpenDoc( UrlFromDocID( Int( oValueElem.GetOptProperty( sFieldNameElem ) ) ) ).TopElem ) );
+										oValueElem.SetProperty( ( 'title:' + sFieldNameElem ), sTitle );
+										bSave = true;
+									}
+									catch ( e )
+									{
+									}
+								}
+							}
+							if ( bSave )
+							{
+								fldParam.value = EncodeJson( oParamValue );
+							}
+						}
+					}
+				}
+			}
+			catch ( err )
+			{
+			}
+			return obj;
+	"/>
+
+	<owt_wvars_to_json PROPERTY="1" PARAM="teOWT" PARAM="bBasicParamsOnly" EXPR="
+
+		var oWVars = {};
+		var bBasicOnly = false;
+		try { bBasicOnly = bBasicParamsOnly; } catch(e) {}
+		try
+		{
+			teCWT = OpenDoc( UrlFromDocID( teOWT.custom_web_template_id ) ).TopElem;
+		}
+		catch(e)
+		{
+			return oWVars;
+		}
+		for ( fldWvarElem in teOWT.wvars )
+		{
+			teCWT.wvars.ObtainChildByKey( fldWvarElem.PrimaryKey ).AssignElem( fldWvarElem );
+		}
+		for( fldElem in teCWT.wvars )
+		{
+			if( fldElem.type=='folder' )
+			{
+				continue;
+			}
+			oWVars.SetProperty( fldElem.PrimaryKey, tools_lp.fld_to_obj( fldElem ) );
+			switch(oWVars[ fldElem.PrimaryKey ].type)
+			{
+				case 'integer':
+				{
+					oWVars[ fldElem.PrimaryKey ].value = OptInt( oWVars[ fldElem.PrimaryKey ].value );
+					break;
+				}
+				case 'real':
+				{
+					oWVars[ fldElem.PrimaryKey ].value = OptReal( oWVars[ fldElem.PrimaryKey ].value );
+					break;
+				}
+				case 'bool':
+				{
+					oWVars[ fldElem.PrimaryKey ].value = tools_web.is_true( oWVars[ fldElem.PrimaryKey ].value );
+					break;
+				}
+				case 'object':
+				{
+					try
+					{
+						oWVars[ fldElem.PrimaryKey ].value = EncodeJson( ParseJson( oWVars[ fldElem.PrimaryKey ].value ) );
+					}
+					catch(e)
+					{
+						oWVars[ fldElem.PrimaryKey ].value = '[]';
+					}
+					break;
+				}
+			}
+			if(bBasicOnly)
+			{
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'parent_wvar_name' );
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'entries' );
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'catalog' );
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'description' );
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'silent' );
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'position' );
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'view' );
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'title' );
+			}
+		}
+		return oWVars;
+
+	"/>
+
+	<plain_wvars_to_json PROPERTY="1" PARAM="teDoc" PARAM="bBasicParamsOnly" EXPR="
+
+		var oWVars = {};
+		var bBasicOnly = false;
+		try { bBasicOnly = bBasicParamsOnly; } catch(e) {}
+		for( fldElem in teDoc.wvars )
+		{
+			//if( fldElem.type=='folder' || ( fldElem.ChildExists( 'silent' ) && fldElem.silent==true ) )
+			if( fldElem.type=='folder' || fldElem.type=='heading' )
+			{
+				continue;
+			}
+			oWVars.SetProperty( fldElem.PrimaryKey, tools_lp.fld_to_obj( fldElem ) );
+			switch(oWVars[ fldElem.PrimaryKey ].type)
+			{
+				case 'foreign_elem':
+				{
+					if ( StrBegins( oWVars[ fldElem.PrimaryKey ].value, '[' ) &amp;&amp; StrEnds( oWVars[ fldElem.PrimaryKey ].value, ']' ) )
+					{
+						oWVars[ fldElem.PrimaryKey ].value = ArrayExtract( SafeEval( oWVars[ fldElem.PrimaryKey ].value ), 'OptInt(This.__value)' );
+					}
+					else
+					{
+						oWVars[ fldElem.PrimaryKey ].value = OptInt( oWVars[ fldElem.PrimaryKey ].value );
+					}
+					break;
+				}
+				case 'file':
+				case 'integer':
+				{
+					oWVars[ fldElem.PrimaryKey ].value = OptInt( oWVars[ fldElem.PrimaryKey ].value );
+					break;
+				}
+				case 'real':
+				{
+					oWVars[ fldElem.PrimaryKey ].value = OptReal( oWVars[ fldElem.PrimaryKey ].value );
+					break;
+				}
+				case 'date':
+				{
+					oWVars[ fldElem.PrimaryKey ].value = OptDate( oWVars[ fldElem.PrimaryKey ].value );
+					break;
+				}
+				case 'bool':
+				{
+					oWVars[ fldElem.PrimaryKey ].value = tools_web.is_true( oWVars[ fldElem.PrimaryKey ].value );
+					break;
+				}
+				case 'object':
+				{
+					try
+					{
+						oWVars[ fldElem.PrimaryKey ].value = EncodeJson( ParseJson( oWVars[ fldElem.PrimaryKey ].value ) );
+					}
+					catch(e)
+					{
+						oWVars[ fldElem.PrimaryKey ].value = '[]';
+					}
+					break;
+				}
+			}
+			if(bBasicOnly)
+			{
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'parent_wvar_name' );
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'entries' );
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'catalog' );
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'description' );
+				//oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'silent' );
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'position' );
+				oWVars[ fldElem.PrimaryKey ].DeleteOptProperty( 'view' );
+			}
+		}
+		return oWVars;
+
+	"/>
+
+	<get_vars_from_cache PROPERTY="1" PARAM="teOWT" EXPR="
+
+		var oVars = null;
+		if(teOWT.GetOptProperty('cache_vars')!=undefined)
+		{
+			var sVars = teOWT.cache_vars;
+			if(sVars!=null)
+			{
+				try
+				{
+					oVars = ParseJson(sVars);
+				}
+				catch(e)
+				{
+				}
+			}
+		}
+		return oVars;
+
+	"/>
+
+	<get_preset PROPERTY="1" PARAM="oWDParamSets" PARAM="sPrefix" PARAM="sPreset" EXPR="
+
+		var oPreset = null;
+		if(sPreset!='custom')
+		{
+			try
+			{
+				if(oWDParamSets!=undefined && oWDParamSets!=null)
+				{
+					oPreset = oWDParamSets[sPrefix][sPreset].params;
+				}
+			}
+			catch(e)
+			{
+			}
+		}
+		return oPreset;
+
+	"/>
+
+	<get_runtime_data_from_cache PROPERTY="1" PARAM="teOWT" PARAM="bSkipCache" EXPR="
+
+		var oData = null;
+		if(!bSkipCache)
+		{
+			try
+			{
+				oData = ParseJson( teOWT.cache_dynamic );
+			}
+			catch(e)
+			{
+			}
+		}
+		return oData;
+
+	"/>
+
+	<get_html_from_cache PROPERTY="1" PARAM="teOWT" PARAM="bSkipCache" EXPR="
+
+		var sHTML = '';
+		if(!bSkipCache)
+		{
+			try
+			{
+				sHTML = teOWT.cache_html;
+			}
+			catch(e)
+			{
+			}
+		}
+		return sHTML;
+
+	"/>
+
+	<update_legacy_params PROPERTY="1" PARAM="oParams" PARAM="aNewParams" EXPR="
+
+		for(oNewParam in aNewParams)
+		{
+			if(!oParams.HasProperty(oNewParam.name))
+			{
+				oParams[oNewParam.name] = oNewParam.value;
+			}
+		}
+		return oParams;
+
+	"/>
+
+	<refresh_web_template_cache PROPERTY="1" ALLOW-CALL-FROM-CLIENT="1" PARAM="iWebDesignIDParam" EXPR="
+			var iResCounter = 0;
+			var xarrWebModes = XQuery( 'for $elem in web_modes where $elem/web_design_id = ' + iWebDesignIDParam + ' return $elem/Fields(\'code\')' );
+			if ( ArrayOptFirstElem( xarrWebModes ) != undefined  )
+			{
+				var xarrRoles = XQuery( 'for $elem in roles where MatchSome( $elem/code, (\'widgets\',\'macros\') ) return $elem/Fields(\'id\')' );
+				if ( ArrayOptFirstElem( xarrRoles ) != undefined )
+				{
+					var xarrCustomWebTemplates = ArraySelectAll( XQuery( 'for $elem in custom_web_templates where MatchSome( $elem/role_id, (' + ArrayMerge( xarrRoles, 'id', ',' ) + ') ) return $elem/Fields(\'id\')' ) );
+					if ( ArrayOptFirstElem( xarrCustomWebTemplates ) != undefined )
+					{
+						var docOverrideWebTemplate = null;
+						var xarrOverrideWebTemplates = tools.xquery( 'for $elem in override_web_templates where MatchSome( $elem/mode, (' + ArrayMerge( xarrWebModes, 'CodeLiteral(This.code)', ',' ) + ') ) and MatchSome( $elem/custom_web_template_id, (' + ArrayMerge( xarrCustomWebTemplates, 'id', ',' ) + ') ) return $elem/id, $elem/__data' );
+						for ( catOverrideWebTemplateElem in xarrOverrideWebTemplates )
+						{
+							try
+							{
+								docOverrideWebTemplate = OpenDoc( UrlFromDocID( catOverrideWebTemplateElem.id ) );
+								if ( docOverrideWebTemplate.TopElem.cache_refresh )
+								{
+									continue;
+								}
+
+								docOverrideWebTemplate.TopElem.cache_refresh = true;
+								docOverrideWebTemplate.Save();
+								iResCounter++;
+							}
+							catch ( err )
+							{
+							}
+						}
+					}
+				}
+			}
+			return iResCounter;
+	"/>
+
+	<webcolor_to_hex PROPERTY="1" ALLOW-CALL-FROM-CLIENT="1" PARAM="sWebColor" EXPR="
+		var oWebColors = {'black':'#000000','blue':'#0000FF','yellow':'#FFFF00','orange':'#FFA500','salmon':'#FA8072','night':'#0C090A','gunmetal':'#2C3539','midnight':'#2B1B17','charcoal':'#34282C','darkslategrey':'#25383C','oil':'#3B3131','blackcat':'#413839','iridium':'#3D3C3A','blackeel':'#463E3F','blackcow':'#4C4646','graywolf':'#504A4B','vampiregray':'#565051','graydolphin':'#5C5858','carbongray':'#625D5D','ashgray':'#666362','cloudygray':'#6D6968','smokeygray':'#726E6D','gray':'#736F6E','granite':'#837E7C','battleshipgray':'#848482','graycloud':'#B6B6B4','graygoose':'#D1D0CE','metallicsilver':'#BCC6CC','bluegray':'#98AFC7','lightslategray':'#6D7B8D','slategray':'#657383','jetgray':'#616D7E','mistblue':'#646D7E','marbleblue':'#566D7E','slateblue':'#737CA1','steelblue':'#4863A0','bluejay':'#2B547E','darkslateblue':'#2B3856','midnightblue':'#151B54','navyblue':'#000080','bluewhale':'#342D7E','lapisblue':'#15317E','denimdarkblue':'#151B8D','earthblue':'#0000A0','cobaltblue':'#0020C2','blueberryblue':'#0041C2','sapphireblue':'#2554C7','blueeyes':'#1569C7','royalblue':'#2B60DE','blueorchid':'#1F45FC','bluelotus':'#6960EC','lightslateblue':'#736AFF','windowsblue':'#357EC7','glacialblueice':'#368BC1','silkblue':'#488AC7','blueivy':'#3090C7','bluekoi':'#659EC7','columbiablue':'#87AFC7','babyblue':'#95B9C7','lightsteelblue':'#728FCE','oceanblue':'#2B65EC','blueribbon':'#306EFF','bluedress':'#157DEC','dodgerblue':'#1589FF','cornflowerblue':'#6495ED','skyblue':'#6698FF','butterflyblue':'#38ACEC','iceberg':'#56A5EC','crystalblue':'#5CB3FF','deepskyblue':'#3BB9FF','denimblue':'#79BAEC','lightskyblue':'#82CAFA','dayskyblue':'#82CAFF','jeansblue':'#A0CFEC','blueangel':'#B7CEEC','pastelblue':'#B4CFEC','seablue':'#C2DFFF','powderblue':'#C6DEFF','coralblue':'#AFDCEC','lightblue':'#ADDFFF','robineggblue':'#BDEDFF','lightaquamarine':'#93FFE8','electricblue':'#9AFEFF','aquamarine':'#7FFFD4','cyanoraqua':'#00FFFF','tronblue':'#7DFDFE','bluezircon':'#57FEFF','bluelagoon':'#8EEBEC','celeste':'#50EBEC','bluediamond':'#4EE2EC','tiffanyblue':'#81D8D0','cyanopaque':'#92C7C7','bluehosta':'#77BFC7','northernlightsblue':'#78C7C7','mediumturquoise':'#48CCCD','turquoise':'#43C6DB','jellyfish':'#46C7C7','bluegreen':'#7BCCB5','macawbluegreen':'#43BFC7','lightseagreen':'#3EA99F','darkturquoise':'#3B9C9C','seaturtlegreen':'#438D80','mediumaquamarine':'#348781','greenishblue':'#307D7E','grayishturquoise':'#5E7D7E','beetlegreen':'#4C787E','teal':'#008080','seagreen':'#4E8975','camouflagegreen':'#78866B','sagegreen':'#848b79','hazelgreen':'#617C58','venomgreen':'#728C00','ferngreen':'#667C26','darkforestgreen':'#254117','mediumseagreen':'#306754','mediumforestgreen':'#347235','seaweedgreen':'#437C17','pinegreen':'#387C44','junglegreen':'#347C2C','shamrockgreen':'#347C17','mediumspringgreen':'#348017','forestgreen':'#4E9258','greenonion':'#6AA121','springgreen':'#4AA02C','limegreen':'#41A317','clovergreen':'#3EA055','greensnake':'#6CBB3C','aliengreen':'#6CC417','greenapple':'#4CC417','yellowgreen':'#52D017','kellygreen':'#4CC552','zombiegreen':'#54C571','froggreen':'#99C68E','greenpeas':'#89C35C','dollarbillgreen':'#85BB65','darkseagreen':'#8BB381','iguanagreen':'#9CB071','avocadogreen':'#B2C248','pistachiogreen':'#9DC209','saladgreen':'#A1C935','hummingbirdgreen':'#7FE817','nebulagreen':'#59E817','stoplightgogreen':'#57E964','algaegreen':'#64E986','jadegreen':'#5EFB6E','green':'#00FF00','emeraldgreen':'#5FFB17','lawngreen':'#87F717','chartreuse':'#8AFB17','dragongreen':'#6AFB92','mintgreen':'#98FF98','greenthumb':'#B5EAAA','lightjade':'#C3FDB8','teagreen':'#CCFB5D','greenyellow':'#B1FB17','slimegreen':'#BCE954','goldenrod':'#EDDA74','harvestgold':'#EDE275','sunyellow':'#FFE87C','mustard':'#FFDB58','rubberduckyyellow':'#FFD801','brightgold':'#FDD017','goldenbrown':'#EAC117','macaroniandcheese':'#F2BB66','saffron':'#FBB917','beer':'#FBB117','cantaloupe':'#FFA62F','beeyellow':'#E9AB17','brownsugar':'#E2A76F','burlywood':'#DEB887','deeppeach':'#FFCBA4','gingerbrown':'#C9BE62','schoolbusyellow':'#E8A317','sandybrown':'#EE9A4D','fallleafbrown':'#C8B560','orangegold':'#D4A017','sand':'#C2B280','cookiebrown':'#C7A317','caramel':'#C68E17','brass':'#B5A642','khaki':'#ADA96E','camelbrown':'#C19A6B','bronze':'#CD7F32','tigerorange':'#C88141','cinnamon':'#C58917','bulletshell':'#AF9B60','darkgoldenrod':'#AF7817','copper':'#B87333','wood':'#966F33','oakbrown':'#806517','moccasin':'#827839','armybrown':'#827B60','sandstone':'#786D5F','mocha':'#493D26','taupe':'#483C32','coffee':'#6F4E37','brownbear':'#835C3B','reddirt':'#7F5217','sepia':'#7F462C','orangesalmon':'#C47451','rust':'#C36241','redfox':'#C35817','chocolate':'#C85A17','sedona':'#CC6600','papayaorange':'#E56717','halloweenorange':'#E66C2C','pumpkinorange':'#F87217','constructionconeorange':'#F87431','sunriseorange':'#E67451','mangoorange':'#FF8040','darkorange':'#F88017','coral':'#FF7F50','basketballorange':'#F88158','lightsalmon':'#F9966B','tangerine':'#E78A61','darksalmon':'#E18B6B','lightcoral':'#E77471','beanred':'#F75D59','valentinered':'#E55451','shockingorange':'#E55B3C','red':'#FF0000','scarlet':'#FF2400','rubyred':'#F62217','ferrarired':'#F70D1A','fireenginered':'#F62817','lavared':'#E42217','lovered':'#E41B17','grapefruit':'#DC381F','chestnutred':'#C34A2C','cherryred':'#C24641','mahogany':'#C04000','chillipepper':'#C11B17','cranberry':'#9F000F','redwine':'#990012','burgundy':'#8C001A','chestnut':'#954535','bloodred':'#7E3517','sienna':'#8A4117','sangria':'#7E3817','firebrick':'#800517','maroon':'#810541','plumpie':'#7D0541','velvetmaroon':'#7E354D','plumvelvet':'#7D0552','rosyfinch':'#7F4E52','puce':'#7F5A58','dullpurple':'#7F525D','rosybrown':'#B38481','khakirose':'#C5908E','pinkbow':'#C48189','lipstickpink':'#C48793','rose':'#E8ADAA','rosegold':'#ECC5C0','desertsand':'#EDC9AF','pigpink':'#FDD7E4','cottoncandy':'#FCDFFF','pinkbubblegum':'#FFDFDD','mistyrose':'#FBBBB9','pink':'#FAAFBE','lightpink':'#FAAFBA','flamingopink':'#F9A7B0','pinkrose':'#E7A1B0','pinkdaisy':'#E799A3','cadillacpink':'#E38AAE','carnationpink':'#F778A1','blushred':'#E56E94','hotpink':'#F660AB','watermelonpink':'#FC6C85','violetred':'#F6358A','deeppink':'#F52887','pinkcupcake':'#E45E9D','pinklemonade':'#E4287C','neonpink':'#F535AA','magenta':'#FF00FF','dimorphothecamagenta':'#E3319D','brightneonpink':'#F433FF','palevioletred':'#D16587','tulippink':'#C25A7C','mediumvioletred':'#CA226B','roguepink':'#C12869','burntpink':'#C12267','bashfulpink':'#C25283','darkcarnationpink':'#C12283','plum':'#B93B8F','violapurple':'#7E587E','purpleiris':'#571B7E','plumpurple':'#583759','indigo':'#4B0082','purplemonster':'#461B7E','purplehaze':'#4E387E','eggplant':'#614051','grape':'#5E5A80','purplejam':'#6A287E','darkorchid':'#7D1B7E','purpleflower':'#A74AC7','mediumorchid':'#B048B5','purpleamethyst':'#6C2DC7','darkviolet':'#842DCE','violet':'#8D38C9','purplesagebush':'#7A5DC7','lovelypurple':'#7F38EC','purple':'#8E35EF','aztechpurple':'#893BFF','mediumpurple':'#8467D7','jasminepurple':'#A23BEC','purpledaffodil':'#B041FF','tyrianpurple':'#C45AEC','crocuspurple':'#9172EC','purplemimosa':'#9E7BFF','heliotropepurple':'#D462FF','crimson':'#E238EC','purpledragon':'#C38EC7','lilac':'#C8A2C8','blushpink':'#E6A9EC','mauve':'#E0B0FF','wisteriapurple':'#C6AEC7','blossompink':'#F9B7FF','thistle':'#D2B9D3','periwinkle':'#E9CFEC','lavenderpinocchio':'#EBDDE2','lavenderblue':'#E3E4FA'};
+		return oWebColors.GetOptProperty( StrLowerCase( sWebColor ) );
+	"/>
+
+	<hex_to_rgb PROPERTY="1" ALLOW-CALL-FROM-CLIENT="1" PARAM="sHexColor" PARAM="bRGBA" PARAM="nOpacity" EXPR="
+
+		var sHex = StrReplace( sHexColor, '#', '' );
+		if(StrCharCount(sHex)==3)
+		{
+			sHex = StrLeftRange(sHex,1) + StrLeftRange(sHex,1) + StrRangePos(sHex,1,2) + StrRangePos(sHex,1,2) + StrRightRangePos(sHex,2) + StrRightRangePos(sHex,2);
+		}
+		var sRes = bRGBA ? 'rgba(' : 'rgb(';
+		iLimit = 0;
+		while( iLimit &lt; 6 )
+		{
+			iStart = iLimit;
+			iLimit += 2;
+			sPair = OptInt( '0x' + sHex.slice( iStart, iLimit ) );
+			if( sPair != undefined )
+			{
+				if( iLimit &gt; 4 )
+				{
+					if(bRGBA==true)
+					{
+						sRes += sPair + ',' + nOpacity + ')';
+					}
+					else
+					{
+						sRes += sPair + ')';
+					}
+				}
+				else
+				{
+					sRes += sPair + ',';
+				}
+			}
+			else
+			{
+				return null;
+			}
+		}
+		return sRes;
+	"/>
+
+	<any_color_to_rgb PROPERTY="1" ALLOW-CALL-FROM-CLIENT="1" PARAM="sColor" PARAM="bRGBA" PARAM="nOpacity" EXPR="
+
+		var sRes = '';
+		var aRes;
+		if( StrContains( StrLowerCase( sColor ), 'rgba(' ) )
+		{
+			if(!bRGBA)
+			{
+				sRes = StrReplace( StrLowerCase( sColor ), 'rgba', 'rgb' );
+				aRes = sRes.split(',');
+				sRes = aRes[0] + ',' + aRes[1] + ',' + aRes[2] + ')';
+			}
+			else
+			{
+				aRes = sColor.split(',');
+				sRes = aRes[0] + ',' + aRes[1] + ',' + aRes[2] + ',' + String(nOpacity) + ')';
+			}
+		}
+		else if( StrContains( StrLowerCase( sColor ), 'rgb(' ) )
+		{
+			if( bRGBA )
+			{
+				sRes = StrReplace( StrLowerCase( sColor ), 'rgb', 'rgba' );
+				sRes = StrReplace( sRes, ')', (',' + String(nOpacity) + ')') );
+			}
+			else
+			{
+				sRes = sColor;
+			}
+		}
+		else
+		{
+			if( !StrBegins( sColor, '#') )
+			{
+				try
+				{
+					sColor =  tools_lp.webcolor_to_hex( sColor );
+				}
+				catch(e) {}
+			}
+			sRes = tools_lp.hex_to_rgb(sColor, bRGBA, nOpacity);
+		}
+		return sRes;
+
+	"/>
+
+	<get_owt_params PROPERTY="1" ALLOW-CALL-FROM-CLIENT="1" PARAM="oCurParams" PARAM="aOWTParams" PARAM="sPrefix" PARAM="bUsePreset" PARAM="oPreset" PARAM="sOWTId"  PARAM="oArgs" EXPR="
+
+		var bHasArgs = false;
+		var bFromVars = false;
+		try { bHasArgs = (oArgs!=undefined); } catch(e) {}
+		if(bHasArgs)
+		{
+			try { bFromVars = (oArgs.bFromVars==true); } catch (e) {}
+		}
+		var oRes = {};
+		var i, j;
+		var sPropName;
+		var sVarName;
+		var sFullVarName;
+		for(i=0; i&lt;aOWTParams.length; i++)
+		{
+			sPropName = aOWTParams[i].name;
+			sVarName = aOWTParams[i].var_name;
+			if( bUsePreset &amp;&amp; oPreset!=null &amp;&amp; oPreset.HasProperty(sVarName) )
+			{
+				oRes[sPropName] = oPreset[sVarName];
+				if( sVarName == 'custom_css_style' || sVarName == 'custom_css_class' )
+				{
+					if(oRes[sPropName]!='')
+					{
+						oRes[sPropName] += ' ';
+					}
+					oRes[sPropName] += tools_web.get_web_param( oCurParams, (sPrefix + '.' + sVarName), aOWTParams[i].def, true, sOWTId );
+				}
+			}
+			else
+			{
+				sVarName = sPrefix + '.' + aOWTParams[i].var_name;
+				if(bFromVars &amp;&amp; oArgs.oVars.HasProperty(sVarName))
+				{
+					if(oArgs.oVars[sVarName].HasProperty('value'))
+					{
+						oRes[sPropName] = oArgs.oVars[sVarName].value;
+					}
+					else
+					{
+						oRes[sPropName] = tools_web.get_web_param( oCurParams, sVarName, aOWTParams[i].def, true, sOWTId );
+					}
+				}
+				else
+				{
+					oRes[sPropName] = tools_web.get_web_param( oCurParams, sVarName, aOWTParams[i].def, true, sOWTId );
+				}
+			}
+			if(oRes[sPropName]==null &amp;&amp; aOWTParams[i].def!=null)
+			{
+				oRes[sPropName] = aOWTParams[i].def;
+			}
+			oRes[sPropName] = tools_lp.apply_param_type(aOWTParams[i], oRes[sPropName]);
+		}
+		if(bHasArgs)
+		{
+			if(oArgs.HasProperty('aChildren'))
+			{
+				var sProp2Name;
+				for(i=0; i<oArgs.aChildren.length; i++)
+				{
+					sPropName = oArgs.aChildren[i].name;
+					oRes[sPropName] = {};
+					for(j=0; j<oArgs.aChildren[i].array.length; j++)
+					{
+						sProp2Name = oArgs.aChildren[i].array[j].name;
+						sVarName = oArgs.aChildren[i].array[j].var_name;
+						if( bUsePreset &amp;&amp; oPreset!=null )
+						{
+							if( oPreset.HasProperty(sVarName) )
+							{
+								oRes[sPropName][sProp2Name] = oPreset[sVarName];
+							}
+							else
+							{
+								sVarName = sPrefix + '.' + oArgs.aChildren[i].array[j].var_name;
+								if(bFromVars &amp;&amp; oArgs.oVars.HasProperty(sVarName))
+								{
+									if(oArgs.oVars[sVarName].HasProperty('value'))
+									{
+										oRes[sPropName][sProp2Name] = oArgs.oVars[sVarName].value;
+									}
+									else
+									{
+										oRes[sPropName][sProp2Name] = tools_web.get_web_param( oCurParams, sVarName, oArgs.aChildren[i].array[j].def, true, sOWTId );
+									}
+								}
+								else
+								{
+									oRes[sPropName][sProp2Name] = tools_web.get_web_param( oCurParams, sVarName, oArgs.aChildren[i].array[j].def, true, sOWTId );
+								}
+							}
+						}
+						else
+						{
+							sVarName = sPrefix + '.' + oArgs.aChildren[i].array[j].var_name;
+							if(bFromVars &amp;&amp; oArgs.oVars.HasProperty(sVarName))
+							{
+								oRes[sPropName][sProp2Name] = oArgs.oVars[sVarName].value;
+							}
+							else
+							{
+								oRes[sPropName][sProp2Name] = tools_web.get_web_param( oCurParams, sVarName, oArgs.aChildren[i].array[j].def, true, sOWTId );
+							}
+						}
+						oRes[sPropName][sProp2Name] = tools_lp.apply_param_type(oArgs.aChildren[i].array[j], oRes[sPropName][sProp2Name]);
+					}
+				}
+			}
+		}
+		return oRes;
+
+	"/>
+
+	<apply_param_type PROPERTY="1" ALLOW-CALL-FROM-CLIENT="1" PARAM="oParam" PARAM="sValue" EXPR="
+	var vValue = sValue;
+	switch(oParam.type)
+	{
+		case 'bool':
+		{
+			vValue = tools_web.is_true( vValue );
+			break
+		}
+		case 'int':
+		{
+			vValue = OptInt( vValue );
+			break;
+		}
+		case 'real':
+		{
+			vValue = OptReal( vValue );
+			break;
+		}
+	}
+	return vValue;
+	"/>
+
+	<save_template_cache PROPERTY="1" PARAM="teWebModeParam" PARAM="sTextParam" EXPR="
+			var docObjectData = tools.obtain_doc_by_key( 'object_data', 'object_id', teWebModeParam.id );
+			docObjectData.TopElem.object_type = 'web_mode';
+			docObjectData.TopElem.object_data_type_id = tools.get_default_object_id( 'object_data_type', 'fcache' );
+			docObjectData.TopElem.start_date = teWebModeParam.doc_info.modification.date;
+			docObjectData.TopElem.data = sTextParam;
+			docObjectData.Save();
+			tools_web.remove_user_data( 'tcache_' + teWebModeParam.id );
+	"/>
+
+	<get_template_cache PROPERTY="1" PARAM="teWebModeParam" EXPR="
+			var sDataID = 'tcache_' + teWebModeParam.id;
+			var sData = tools_web.get_user_data( sDataID );
+			if ( sData == null )
+			{
+				var catObjectData = ArrayOptFirstElem( XQuery( 'for $elem in object_datas where $elem/object_id = ' + teWebModeParam.id + ( teWebModeParam.doc_info.modification.date.HasValue ? ( ' and $elem/start_date >= date(\'' + teWebModeParam.doc_info.modification.date + '\')' ) : '' ) + ' return $elem/Fields(\'id\')' ) );
+				if ( catObjectData == undefined )
+				{
+					return null;
+				}
+				var teObjectData = OpenDoc( UrlFromDocID( catObjectData.id ) ).TopElem;
+				var sRes = teObjectData.data.Value;
+				tools_web.set_user_data( sDataID, sRes, 86400 );
+				return sRes;
+			}
+			else
+			{
+				return sData;
+			}
+	"/>
+
+	<replace_template_cache PROPERTY="1" PARAM="teWebModeParam" PARAM="sTextParam" PARAM="Request" EXPR="
+			var Env = Request.Session.GetOptProperty( 'Env', ({}) );
+			var sTracingLevel = Request.QueryString.GetOptProperty('tracing');
+			var bTracing = sTracingLevel!=undefined;
+			var iTracingTimeout = 100000;
+			if(bTracing)
+			{
+				if(global_settings.settings.GetOptProperty('tracing', false))
+				{
+					EnableLog('tracing');
+					iTracingTimeout = OptInt(global_settings.settings.GetOptProperty('tracing_timeout', 100000));
+				}
+				else
+				{
+					bTracing = false;
+				}
+				if(sTracingLevel!='collection' && sTracingLevel!='statistics' && sTracingLevel!='verbose')
+				{
+					sTracingLevel = 'normal';
+				}
+			}
+			var sTracingLog = '';
+			var iTraceStart;
+			var iStart;
+			var bPaging;
+			var arrSubs = [];
+			var oResStream = new BufStream;
+			var iBeginIndex = sTextParam.indexOf( '&lt;!--[BEGIN ', 0 , false );
+			var iEndIndex = 0;
+			var iLastIndex = 0;
+			var oRes;
+			var sFilterString;
+			var oFilters;
+			var bLocalDataHandling = false;
+			var iOWTId;
+			var sHexOWTId;
+			var oOWT;
+			var sCWTName;
+			var iBlockId;
+			var oWidgetTitle;
+			var teOWT; // only for tracing verbose
+			while ( iBeginIndex &gt;= 0 )
+			{
+				iIndefIndex = sTextParam.indexOf( ' ', iBeginIndex + 11 , false );
+				sIndef = StrRangePos( sTextParam, iBeginIndex + 11, iIndefIndex );
+				oParams = ParseJson( StrRangePos( sTextParam, iIndefIndex, sTextParam.indexOf( ']--&gt;', iIndefIndex , false ) ) );
+				sType = oParams.GetOptProperty( 'type' );
+				iBlockId = OptInt( oParams.GetOptProperty( 'override_web_template_id' ) );
+				bDelete = true;
+				switch ( sType )
+				{
+					case 'collection':
+					{
+						break;
+					}
+					case 'subs':
+					{
+						arrSubs = oParams.GetOptProperty( 'subs', [] );
+						if ( ArrayCount( arrSubs ) != 0 )
+						{
+							arrSubs = tools_lp.fill_subs_with_values( Env, arrSubs );
+						}
+						break;
+					}
+					default: // owt
+					{
+						iOWTId = iBlockId; // to save it in iOWTId if next block is collection
+						sHexOWTId = oParams.GetOptProperty( 'override_web_template_id' );
+						if(bTracing)
+						{
+							oOWT = ArrayOptFirstElem( XQuery( 'for $elem in override_web_templates where $elem/id=' + iOWTId + ' return $elem' ));
+							if(oOWT!=undefined)
+							{
+								sCWTName = oOWT.custom_web_template_name;
+								if(sTracingLevel=='verbose')
+								{
+									if(oOWT.custom_web_template_id==6769900896653832444) // itemlist
+									{
+										try
+										{
+											teOWT = OpenDoc( UrlFromDocID( iOWTId ) ).TopElem;
+											oWidgetTitle = teOWT.wvars.GetOptChildByKey('block_itemlist.block_header_text');
+											if(oWidgetTitle!=undefined)
+											{
+												sCWTName += ' &quot;' + oWidgetTitle.value.Value + '&quot;';
+											}
+										}
+										catch(e)
+										{ alert('??? ' + e) }
+									}
+								}
+							}
+							else
+							{
+								sCWTName = '?widget?'
+							}
+						}
+						if ( tools_web.is_true( oParams.GetOptProperty( 'ignore_rules' ) ) )
+						{
+							bDelete = false;
+						}
+						else
+						{
+							bDelete = ! tools_lp.check_web_mode_disp( teWebModeParam, iOWTId, Env );
+						}
+						break;
+					}
+				}
+				if ( bDelete )
+				{
+					oResStream.WriteStr( StrRangePos( sTextParam, iEndIndex, iBeginIndex ) );
+					sEndTag = '&lt;!--[END ' + sIndef + ']--&gt;';
+					iLastIndex = iEndIndex = sTextParam.indexOf( sEndTag, iBeginIndex , false ) + StrLen( sEndTag );
+				}
+				else
+				{
+					iLastIndex = iBeginIndex + 10;
+				}
+				iTraceStart = GetCurTicks();
+				if(bTracing)
+				{
+					if(sType=='collection')
+					{
+						LogEvent('tracing', '[START] refilling widget ' + sCWTName + ' ' + sHexOWTId + ' with collection data');
+					}
+					else if(sTracingLevel=='verbose')
+					{
+						LogEvent('tracing', '[START] reading widget ' + sCWTName + ' ' + sHexOWTId);
+					}
+				}
+				switch ( sType )
+				{
+					case 'collection':
+					{
+						bPaging = false;
+						if(tools_web.is_true( oParams.GetOptProperty( 'omit_in_fcache' ), false ))
+						{
+							if(bTracing)
+							{
+								if(sType!='statistics')
+								{
+									LogEvent('tracing', '[SKIP] refilling ' + sCWTName + ' ' + sHexOWTId + ' - deferred loading in widget');
+								}
+							}
+							break;
+						}
+						iCollectionID = OptInt( oParams.GetOptProperty( 'collection_id' ) );
+						arrParams = ParseJson( tools_lp.substitute_in_cache( EncodeJson(oParams.GetOptProperty( 'aVars' )), arrSubs, true ) );
+						teRemoteCollection = OpenDoc( UrlFromDocID( iCollectionID ) ).TopElem;
+
+						bLocalDataHandling = oParams.GetOptProperty( 'loading' )=='client';
+						if(!bLocalDataHandling)
+						{
+							sFilterString = oParams.GetOptProperty( 'filters' );
+							if(sFilterString!=undefined)
+							{
+								arrParams.push({ name: '_FILTERS', type: 'string', value: sFilterString });
+								try
+								{
+									oFilters = ParseJson(oArgs.sFilterString);
+									for(oF in oFilters)
+									{
+										if(oF.type=='search')
+										{
+											arrParams.push({ name: '_SEARCH', type: 'string', value: oF.value });
+											break;
+										}
+									}
+								}
+								catch(e) {}
+							}
+
+							if(oParams.HasProperty('distincts'))
+							{
+								if(oParams.distincts!='')
+								{
+									arrParams.push({ name: '_DISTINCTS', type: 'string', value: oParams.distincts });
+								}
+							}
+
+							if(oParams.HasProperty('paging'))
+							{
+								if(oParams.paging.bPaging==true &amp;&amp; oParams.paging.bServerSide==true)
+								{
+									if(oParams.paging.iPageIndex!=undefined && oParams.paging.iPageSize!=undefined)
+									{
+										bPaging = true;
+										teRemoteCollection.setPaging(oParams.paging.iPageIndex-1, oParams.paging.iPageSize);
+									}
+								}
+							}
+
+							if(oParams.HasProperty('sorting'))
+							{
+								if(oParams.sorting.sSortField!=undefined && oParams.sorting.sSortOrder!=undefined)
+								{
+									teRemoteCollection.sort_field_name = oParams.sorting.sSortField;
+									if(teRemoteCollection.sort_field_name.HasValue)
+									{
+										teRemoteCollection.sort_direction = StrUpperCase(oParams.sorting.sSortOrder);
+									}
+								}
+							}
+						}
+
+						tools_web.set_web_params( teRemoteCollection.wvars, arrParams, true );
+
+						if(bTracing &amp;&amp; sTracingLevel!='statistics')
+						{
+							iStart = GetCurTicks();
+						}
+						oRes = teRemoteCollection.evaluate( 'raw', Request );
+						if(bTracing &amp;&amp; sTracingLevel!='statistics')
+						{
+							iTrackingTime = GetCurTicks() - iStart;
+							__sLog = '[FILL] ' + sCWTName + ' ' + sHexOWTId + ' -&gt; FCache -&gt; Collection: ' + teRemoteCollection.code + ' (' + iCollectionID + '): ' + iTrackingTime + 'ms. Server side paging is ' + (bPaging ? ('ON (size: ' + oParams.paging.iPageSize + ', page: ' + oParams.paging.iPageIndex + ')') : 'OFF');
+							if(iTrackingTime > iTracingTimeout)
+							{
+								__sLog += '\n -&gt; !!! THRESHOLD ' + iTracingTimeout + ' EXCEEDED !!!';
+								__sLog += '\n -&gt; Collection params:';
+								for(oVar in teRemoteCollection.wvars)
+								{
+									__sLog += '\n -&gt; -&gt; ' + oVar.type.Value + ' ' + oVar.name.Value + '=' + oVar.value.Value;
+								}
+							}
+							else if(sTracingLevel=='verbose')
+							{
+								__sLog += '\n -&gt; Collection params:';
+								for(oVar in teRemoteCollection.wvars)
+								{
+									__sLog += '\n -&gt; -&gt; ' + oVar.type.Value + ' ' + oVar.name.Value + '=' + oVar.value.Value;
+								}
+							}
+							LogEvent('tracing', __sLog);
+						}
+
+						oResult =
+						{
+							aResult: oRes.result,
+							data: oRes.result,
+							iTotal: oRes.total,
+							sSortField: oRes.sort_field_name,
+							sSortDirection: oRes.sort_direction
+						};
+						oResult.aItems = tools_lp.map_collection_result( oRes, oParams.GetOptProperty( 'aMap' ) );
+						for(i=0; i &lt; oResult.aItems.length; i++)
+						{
+							if(!oResult.aResult[i].HasProperty('parent_id'))
+							{
+								continue;
+							}
+							iParent = OptInt(oResult.aResult[i].parent_id);
+							if(iParent!=undefined)
+							{
+								oResult.aItems[i].parent_id = String(iParent);
+								oResult.aItems[i].hex_parent_id = '0x' + StrHexInt(iParent, 16);
+							}
+							else
+							{
+								oResult.aItems[i].parent_id = oResult.aItems[i].hex_parent_id = oResult.aResult[i].parent_id;
+							}
+						}
+						oResult.aFields = ArrayExtract( teRemoteCollection.result_fields, '({id:This.id.Value,name:This.name.Value,type:This.type.Value,title:This.title.Value,desc:This.desc.Value})' );
+						if(oRes.HasProperty('columns') && IsArray(oRes.columns))
+						{
+							if (ArrayOptFirstElem(oRes.columns)!=undefined)
+							{
+								oResult.aFields = [];
+								for(fldColumn in oRes.columns)
+								{
+									oResult.aFields.push({ id: fldColumn.GetOptProperty('id',tools.random_string( 6 )), name: fldColumn.GetOptProperty('name',fldColumn.GetOptProperty('data','')), type: fldColumn.GetOptProperty('type','string'), title: fldColumn.GetOptProperty('title',''), desc: fldColumn.GetOptProperty('desc','')});
+								}
+							}
+						}
+
+						oResult.oCollectionParams = oParams.GetOptProperty( 'oCollectionParams' );
+						if(oResult.oCollectionParams!=undefined)
+						{
+							oReplaced = tools_lp.replace_local_subs(oResult.oCollectionParams);
+							if(oReplaced!=undefined)
+							{
+								if(oReplaced.oParams!=undefined &amp;&amp; oReplaced.aAppendToSubs!=undefined)
+								{
+									oResult.oCollectionParams = oReplaced.oParams;
+									arrSubs = ArrayUnion(arrSubs, oReplaced.aAppendToSubs);
+								}
+							}
+						}
+
+						if ( oRes.HasProperty('data') &amp;&amp; DataType( oRes.data ) == 'object' &amp;&amp; ObjectType( oRes.data ) == 'JsObject' )
+						{
+							if(oRes.data.HasProperty('distincts'))
+							{
+								oResult.oDistincts = oRes.data.distincts;
+							}
+						}
+
+						oResStream.WriteStr( UrlEncode16( EncodeJson( oResult, { ExportLargeIntegersAsStrings: true } ) ) );
+						break;
+					}
+				}
+				if(bTracing)
+				{
+					if(sType=='collection')
+					{
+						LogEvent('tracing', '[END] ' + sCWTName + ' ' + sHexOWTId + ' Total time: ' + (GetCurTicks()-iTraceStart) + 'ms to refill widget with collection data\n');
+					}
+					else if(sTracingLevel=='verbose')
+					{
+						LogEvent('tracing', '[END] ' + sCWTName + ' ' + sHexOWTId + ' Total time: ' + (GetCurTicks()-iTraceStart) + 'ms to read widget structure from FCache\n');
+					}
+				}
+				iBeginIndex = sTextParam.indexOf( '&lt;!--[BEGIN ', iLastIndex, false );
+			}
+			if ( iEndIndex == 0 )
+			{
+				return tools_lp.substitute_in_cache( sTextParam, arrSubs );
+			}
+			else
+			{
+				oResStream.WriteStr( StrRightRangePos( sTextParam, iEndIndex ) );
+				return tools_lp.substitute_in_cache( oResStream.DetachStr(), arrSubs );
+			}
+	"/>
+
+	<replace_local_subs PROPERTY="1" PARAM="oColParams" EXPR="
+
+		var oReturn = { oParams: oColParams, aAppendToSubs: [] };
+		var sText = EncodeJson(oReturn.oParams);
+		if(StrContains(sText, '{{') &amp;&amp; StrContains(sText, '}}'))
+		{
+			var objRegExp = tools_web.reg_exp_init();
+			objRegExp.Global = true;
+			objRegExp.IgnoreCase = true;
+			objRegExp.MultiLine = false;
+			objRegExp.Pattern = '\{{2}([^}]+)\}{2}';
+			var oMatches = objRegExp.Execute(sText);
+			var sString;
+			var sXString;
+			for(var i=0; i &lt; oMatches.Count; i++)
+			{
+				sXString = String(oMatches.Item(i));
+				if( StrContains(sXString, 'LOCAL.') || StrContains(sXString, 'FIELD.') )
+				{
+					sString = StrReplace(sXString, '{{', '|~|');
+					sString = StrReplace(sString, '}}', '|~|');
+					sText = StrReplace(sText, sXString, sString);
+					oReturn.aAppendToSubs.push({ string: sString, base: 'REPLACEDLOCAL', value: sXString });
+				}
+			}
+			oReturn.oParams = ParseJson(sText);
+		}
+		return oReturn;
+
+	"/>
+
+	<map_collection_result PROPERTY="1" PARAM="oColResult" PARAM="aColMap" EXPR="
+
+		var aItems = [];
+		if(oColResult.HasProperty('result') && IsArray(oColResult.result))
+		{
+			var oItem;
+			for(oElem in oColResult.result)
+			{
+				if(!oElem.HasProperty('id'))
+				{
+					continue;
+				}
+				iInt = OptInt(oElem.id);
+				oItem = { id: String(oElem.id), hex_id: ((iInt!=undefined) ? '0x' + StrHexInt(iInt, 16) : oElem.id) };
+				for(oMap in aColMap)
+				{
+					if(oMap.in_result.sub==true)
+					{
+						oItem[oMap.name_in_item] = oMap.in_result.name;
+					}
+					else
+					{
+						if(oMap.in_result.name!='')
+						{
+							if(oElem.HasProperty(oMap.in_result.name))
+							{
+								oItem[oMap.name_in_item] = RValue(oElem[oMap.in_result.name]);
+							}
+							else
+							{
+								oItem[oMap.name_in_item] = '';
+							}
+						}
+						else
+						{
+							oItem[oMap.name_in_item] = '';
+						}
+					}
+				}
+				aItems.push(oItem);
+			}
+		}
+		return aItems;
+
+	"/>
+
+	<fill_subs_with_values PROPERTY="1" PARAM="Env" PARAM="arrSubsParam" EXPR="
+		if(Env != undefined)
+		{
+			if(IsArray(arrSubsParam))
+			{
+				var aRestricted = [ 'password' ];
+				var aParts;
+				var oProp;
+				var teFE;
+				var oFEProp;
+				var sValue;
+				var dValue;
+				var sSecondPart;
+				var oCurWebDesign;
+				var oLngEnv = tools_web.get_cur_lng_obj( Env );
+				var oCurLng = oLngEnv.curLng;
+				var aLocal = [];
+				var aFlds = [];
+				var bRichText;
+				for(oSub in arrSubsParam)
+				{
+					aParts = oSub.replace_with.split('.');
+					sValue = '';
+					bRichText = false;
+					switch(oSub.base)
+					{
+						case 'curDoc':
+						{
+							oCurDoc = Env.GetOptProperty('curDoc', null);
+							if(aParts.length &gt; 1 &amp;&amp; oCurDoc != null)
+							{
+								if(aParts[1]!='' &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + aParts[1] + '\'')==undefined)
+								{
+									oProp = oCurDoc.OptChild(aParts[1]);
+									if(oProp!=undefined)
+									{
+										if(aParts.length &gt; 2)
+										{
+											if(aParts[2]=='FE' || aParts[2]=='ForeignElem')
+											{
+												if(aParts.length &gt; 3)
+												{
+													if(aParts[3]!='')
+													{
+														teFE = oProp.OptForeignElem;
+														if(teFE!=undefined)
+														{
+															oFEProp = teFE.OptChild(aParts[3]);
+															if(oFEProp!=undefined &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + aParts[3] + '\'')==undefined)
+															{
+																sValue = RValue(teFE.GetOptProperty(aParts[3]));
+																if(aParts[3]=='text_area' || aParts[3]=='desc' || aParts[3]=='description')
+																{
+																	//sValue = tools_web.convert_bbcode_to_html(sValue);
+																	bRichText = true;
+																}
+																else
+																{
+																	if(oSub.modifier=='HTML')
+																	{
+																		bRichText = true;
+																	}
+																	else if(oSub.modifier!='CODE')
+																	{
+																		sValue = tools_web.convert_xss(sValue);
+																	}
+																}
+															}
+														}
+													}
+												}
+											}
+										}
+										else
+										{
+											sValue = RValue(oCurDoc.GetOptProperty(aParts[1]));
+											if(aParts[1]=='text_area' || aParts[1]=='desc' || aParts[1]=='description')
+											{
+												//sValue = tools_web.convert_bbcode_to_html(sValue);
+												bRichText = true;
+											}
+											else
+											{
+												if(oSub.modifier=='HTML')
+												{
+													bRichText = true;
+												}
+												else if(oSub.modifier!='CODE')
+												{
+													sValue = tools_web.convert_xss(sValue);
+												}
+											}
+										}
+										if(sValue!=undefined &amp;&amp; oCurLng!=null)
+										{
+											sValue = tools_web.get_cur_lng_name( sValue, oCurLng.short_id);
+											if(StrContains(sValue, 'compound'))
+											{
+												sValue = tools_web.get_web_desc( sValue, ({'mode':'data'}) );
+											}
+										}
+									}
+								}
+							}
+							break;
+						}
+						case 'curEnv':
+						{
+							if(aParts.length &gt; 1)
+							{
+								sSecondPart = StrLowerCase(aParts[1]);
+								if(sSecondPart!='' &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + sSecondPart + '\'')==undefined)
+								{
+									switch(sSecondPart)
+									{
+										case 'curwebdesign':
+										{
+											oCurWebDesign = tools_web.get_cur_web_design( Env );
+											if(aParts.length &gt; 2 &amp;&amp; oCurWebDesign != null)
+											{
+												switch(StrLowerCase(aParts[2]))
+												{
+													case 'code':
+													{
+														sValue = oCurWebDesign.GetOptProperty('code');
+														break;
+													}
+													case 'name':
+													{
+														sValue = oCurWebDesign.GetOptProperty('name');
+														break;
+													}
+												}
+											}
+											break;
+										}
+										case 'curlng':
+										{
+											if(aParts.length &gt; 2 &amp;&amp; oCurLng != null)
+											{
+												switch(StrLowerCase(aParts[2]))
+												{
+													case 'id':
+													{
+														sValue = oCurLng.GetOptProperty('id');
+														break;
+													}
+													case 'short_id':
+													{
+														sValue = oCurLng.GetOptProperty('short_id');
+														break;
+													}
+													case 'name':
+													{
+														sValue = oCurLng.GetOptProperty('name');
+														break;
+													}
+												}
+											}
+											break;
+										}
+										case 'curhost':
+										{
+											var oCurHost = tools_web.get_cur_host( Env );
+											if(aParts.length &gt; 2 &amp;&amp; oCurHost != null)
+											{
+												switch(StrLowerCase(aParts[2]))
+												{
+													case 'id':
+													{
+														sValue = oCurHost.GetOptProperty('id');
+														break;
+													}
+													case 'code':
+													{
+														sValue = oCurHost.GetOptProperty('code');
+														break;
+													}
+													case 'name':
+													{
+														sValue = Env.GetOptProperty('curHostName');
+														break;
+													}
+													case 'port':
+													{
+														sValue = oCurHost.GetOptProperty('port');
+														break;
+													}
+													case 'hostname':
+													{
+														sValue = oCurHost.GetOptProperty('hostname');
+														break;
+													}
+													case 'path':
+													{
+														sValue = Env.GetOptProperty('curHostPath');
+														break;
+													}
+													case 'portal_auth_type':
+													{
+														sValue = String(oCurHost.GetOptProperty('portal_auth_type'));
+														break;
+													}
+												}
+											}
+											break;
+										}
+										case 'cursite':
+										{
+											var oCurSite = tools_web.get_cur_site(Env);
+											if(aParts.length &gt; 2 &amp;&amp; oCurSite != null)
+											{
+												switch(StrLowerCase(aParts[2]))
+												{
+													case 'id':
+													{
+														sValue = Env.GetOptProperty('curSiteID');
+														break;
+													}
+													case 'code':
+													{
+														sValue = oCurSite.GetOptProperty('code');
+														break;
+													}
+													case 'name':
+													{
+														sValue = oCurSite.GetOptProperty('name');
+														break;
+													}
+													case 'object_type':
+													{
+														sValue = oCurSite.GetOptProperty('object_type');
+														break;
+													}
+													case 'object_id':
+													{
+														sValue = oCurSite.GetOptProperty('object_id');
+														break;
+													}
+												}
+											}
+											break;
+										}
+										case 'curdevice':
+										{
+											var oCurDevice = Env.GetOptProperty('curDevice', null);
+											if(aParts.length &gt; 2 &amp;&amp; oCurDevice != null)
+											{
+												switch(StrLowerCase(aParts[2]))
+												{
+													case 'type':
+													{
+														sValue = oCurDevice.GetOptProperty('type');
+														break;
+													}
+												}
+											}
+											break;
+										}
+										case 'curenvurl':
+										{
+											sValue = tools_web.get_cur_env_url( Env );
+											break;
+										}
+										case 'nowdate':
+										{
+											sValue = StrXmlDate(Date());
+											break;
+										}
+										case 'nowdatetime':
+										{
+											sValue = StrXmlDate(Date(), true, true);
+											break;
+										}
+										case 'nowdatestring':
+										{
+											sValue = StrDate(Date());
+											break;
+										}
+										case 'nowdatetimestring':
+										{
+											sValue = StrDate(Date(), true, true);
+											break;
+										}
+										case 'nowtimestring':
+										{
+											sValue = StrTime(Date());
+											break;
+										}
+									}
+								}
+							}
+							break;
+						}
+						case 'curUser':
+						{
+							oCurUser = Env.GetOptProperty('curUser', null);
+							if(aParts.length &gt; 1 &amp;&amp; oCurUser!=null)
+							{
+								if(aParts[1]!='' &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + aParts[1] + '\'')==undefined)
+								{
+									oProp = oCurUser.OptChild(aParts[1]);
+									if(oProp!=undefined)
+									{
+										if(aParts.length &gt; 2)
+										{
+											if(aParts[2]=='FE' || aParts[2]=='ForeignElem')
+											{
+												if(aParts.length &gt; 3)
+												{
+													if(aParts[3]!='')
+													{
+														teFE = oProp.OptForeignElem;
+														if(teFE!=undefined)
+														{
+															oFEProp = teFE.OptChild(aParts[3]);
+															if(oFEProp!=undefined &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + aParts[3] + '\'')==undefined)
+															{
+																sValue = RValue(teFE.GetOptProperty(aParts[3]));
+																if(aParts[3]=='text_area' || aParts[3]=='desc' || aParts[3]=='description')
+																{
+																	//sValue = tools_web.convert_bbcode_to_html(sValue);
+																	bRichText = true;
+																}
+																else
+																{
+																	if(oSub.modifier=='HTML')
+																	{
+																		bRichText = true;
+																	}
+																	else if(oSub.modifier!='CODE')
+																	{
+																		sValue = tools_web.convert_xss(sValue);
+																	}
+																}
+															}
+														}
+													}
+												}
+											}
+										}
+										else
+										{
+											sValue = RValue(oCurUser.GetOptProperty(aParts[1]));
+											if(aParts[1]=='text_area' || aParts[1]=='desc' || aParts[1]=='description')
+											{
+												//sValue = tools_web.convert_bbcode_to_html(sValue);
+												bRichText = true;
+											}
+											else
+											{
+												if(oSub.modifier=='HTML')
+												{
+													bRichText = true;
+												}
+												else if(oSub.modifier!='CODE')
+												{
+													sValue = tools_web.convert_xss(sValue);
+												}
+											}
+										}
+										if(sValue!=undefined &amp;&amp; oCurLng!=null)
+										{
+											sValue = tools_web.get_cur_lng_name( sValue, oCurLng.short_id);
+											if(StrContains(sValue, 'compound'))
+											{
+												sValue = tools_web.get_web_desc( sValue, ({'mode':'data'}) );
+											}
+										}
+									}
+								}
+							}
+							break;
+						}
+						case 'curObject':
+						{
+							oCurObject = Env.GetOptProperty('curObject', null);
+							if(aParts.length &gt; 1 &amp;&amp; oCurObject!=null)
+							{
+								if(aParts[1]!='' &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + aParts[1] + '\'')==undefined)
+								{
+									oProp = oCurObject.OptChild(aParts[1]);
+									if(oProp!=undefined)
+									{
+										if(aParts.length &gt; 2)
+										{
+											if(aParts[2]=='FE' || aParts[2]=='ForeignElem')
+											{
+												if(aParts.length &gt; 3)
+												{
+													if(aParts[3]!='')
+													{
+														teFE = oProp.OptForeignElem;
+														if(teFE!=undefined)
+														{
+															oFEProp = teFE.OptChild(aParts[3]);
+															if(oFEProp!=undefined &amp;&amp; ArrayOptFind(aRestricted, 'This==\'' + aParts[3] + '\'')==undefined)
+															{
+																sValue = RValue(teFE.GetOptProperty(aParts[3]));
+																if(aParts[3]=='text_area' || aParts[3]=='desc' || aParts[3]=='description')
+																{
+																	//sValue = tools_web.convert_bbcode_to_html(sValue);
+																	bRichText = true;
+																}
+																else
+																{
+																	if(oSub.modifier=='HTML')
+																	{
+																		bRichText = true;
+																	}
+																	else if(oSub.modifier!='CODE')
+																	{
+																		sValue = tools_web.convert_xss(sValue);
+																	}
+																}
+															}
+														}
+													}
+												}
+											}
+										}
+										else
+										{
+											sValue = RValue(oCurObject.GetOptProperty(aParts[1]));
+											if(aParts[1]=='text_area' || aParts[1]=='desc' || aParts[1]=='description')
+											{
+												//sValue = tools_web.convert_bbcode_to_html(sValue);
+												bRichText = true;
+											}
+											else
+											{
+												if(oSub.modifier=='HTML')
+												{
+													bRichText = true;
+												}
+												else if(oSub.modifier!='CODE')
+												{
+													sValue = tools_web.convert_xss(sValue);
+												}
+											}
+										}
+										if(sValue!=undefined &amp;&amp; oCurLng!=null)
+										{
+											sValue = tools_web.get_cur_lng_name( sValue, oCurLng.short_id);
+											if(StrContains(sValue, 'compound'))
+											{
+												sValue = tools_web.get_web_desc( sValue, ({'mode':'data'}) );
+											}
+										}
+									}
+								}
+							}
+							break;
+						}
+						case 'curContext':
+						{
+							oCurContext = Env.GetOptProperty( 'curContext', null );
+							if(oCurContext != null)
+							{
+								for(oElem in oCurContext)
+								{
+									if( oElem.HasProperty('name') )
+									{
+										if(oElem.name == aParts[1])
+										{
+											sValue = ((oElem.GetOptProperty('value_str') != undefined) ? oElem.value_str : oElem.value);
+											if(aParts.length &gt; 2)
+											{
+												try
+												{
+													oObj = ParseJson( sValue );
+													if( oObj.GetOptProperty(aParts[2]) != undefined )
+													{
+														sValue = RValue( oObj[ aParts[2] ] );
+													}
+													else
+													{
+														sValue = undefined;
+													}
+												}
+												catch(e)
+												{
+													sValue = undefined;
+												}
+											}
+											if(sValue!=undefined &amp;&amp; oCurLng!=null)
+											{
+												sValue = tools_web.get_cur_lng_name( sValue, oCurLng.short_id);
+											}
+											if(oSub.modifier=='HTML')
+											{
+												bRichText = true;
+											}
+											else if(oSub.modifier!='CODE')
+											{
+												sValue = tools_web.convert_xss(sValue);
+											}
+											break;
+										}
+									}
+								}
+							}
+							break;
+						}
+						case 'LOCAL':
+						{
+							if(aParts.length &gt; 1)
+							{
+								aLocal.push(aParts[1]);
+								sRep = '&lt;var ';
+								if(oSub.modifier=='B64')
+								{
+									sRep += 'wt-b64=&quot;1&quot; ';
+								}
+								sRep += 'wt-var-local=&quot;' + aParts[1] + '&quot;&gt;&lt;/var&gt;';
+								sValue = sRep;
+							}
+							break;
+						}
+						case 'FIELD':
+						{
+							if(aParts.length &gt; 1)
+							{
+								aFlds.push(aParts[1]);
+								sRep = '&lt;var ';
+								if(oSub.modifier=='B64')
+								{
+									sRep += 'wt-b64=&quot;1&quot; ';
+								}
+								sRep += 'wt-var-fld=&quot;' + aParts[1] + '&quot;&gt;&lt;/var&gt;';
+								sValue = sRep;
+							}
+							break;
+						}
+						case 'ITEM':
+						{
+							break;
+						}
+					}
+
+					if(sValue!='' &amp;&amp; sValue != undefined &amp;&amp; oSub.base!='LOCAL' &amp;&amp; oSub.base!='FIELD' &amp;&amp; oSub.base!='ITEM')
+					{
+						if(oSub.modifier=='DATE')
+						{
+							if(DataType(sValue)=='date')
+							{
+								sValue = StrDate(sValue, false);
+							}
+							else
+							{
+								dValue = OptDate(sValue);
+								if(dValue!=undefined)
+								{
+									sValue = StrDate(dValue, false);
+								}
+							}
+						}
+						else if(oSub.modifier=='DATETIME')
+						{
+							if(DataType(sValue)=='date')
+							{
+								sValue = StrDate(sValue, true, false);
+							}
+							else
+							{
+								dValue = OptDate(sValue);
+								if(dValue!=undefined)
+								{
+									sValue = StrDate(dValue, true, false);
+								}
+							}
+						}
+						else if(oSub.modifier=='DATETIMESEC')
+						{
+							if(DataType(sValue)=='date')
+							{
+								sValue = StrDate(sValue, true);
+							}
+							else
+							{
+								dValue = OptDate(sValue);
+								if(dValue!=undefined)
+								{
+									sValue = StrDate(dValue, true, true);
+								}
+							}
+						}
+						if(oSub.modifier=='B64')
+						{
+							sValue = Base64Encode(sValue);
+						}
+						if(bRichText)
+						{
+							sValue = 'B64___' + Base64Encode(sValue) + '___B64';
+						}
+					}
+
+					oSub.value = sValue;
+				}
+			}
+		}
+		return arrSubsParam;
+	"/>
+
+	<substitute_in_cache PROPERTY="1" PARAM="sTextParam" PARAM="arrSubsParam" PARAM="bParamsOnly" EXPR="
+		var bParams = false;
+		try { bParams = bParamsOnly } catch(e) {}
+		if(IsArray(arrSubsParam))
+		{
+			for(oSub in arrSubsParam)
+			{
+				if(bParams)
+				{
+					if(oSub.base=='LOCAL' || oSub.base=='FIELD' || oSub.base=='ITEM')
+					{
+						sTextParam = StrReplace(sTextParam, oSub.string, '');
+					}
+					else
+					{
+						sTextParam = StrReplace(sTextParam, oSub.string, oSub.value);
+					}
+				}
+				else
+				{
+					sTextParam = StrReplace(sTextParam, UrlEncode16(oSub.string), UrlEncode16( StrReplace (oSub.value, '&quot;', '\\&quot;') ));
+				}
+			}
+		}
+		return sTextParam;
+	"/>
+
+	<collect_all_subs PROPERTY="1" PARAM="sTextParam" EXPR="
+
+		if(StrContains(sTextParam, '&lt;!--SUBS'))
+		{
+			var aDistinctSubs = [];
+			var aParts = sTextParam.split('&lt;!--SUBS');
+			var aChunks;
+			var aSubs;
+			for(i=0; i<aParts.length; i++)
+			{
+				aChunks = aParts[i].split('SUBS--&gt;');
+				if(aChunks.length==2)
+				{
+					try
+					{
+						aSubs = ParseJson(aChunks[0]);
+						for(j=0; j<aSubs.length; j++)
+						{
+							if(ArrayOptFind(aDistinctSubs, 'This.string==' + CodeLiteral(aSubs[j].string))==undefined)
+							{
+								aDistinctSubs.push(ParseJson(EncodeJson(aSubs[j])));
+							}
+						}
+					}
+					catch(e) {}
+					aParts[i] = aChunks[1];
+				}
+			}
+			sTextParam = aParts.join('');
+			var sSubsId = tools.random_string(8);
+			if(aDistinctSubs.length!=0)
+			{
+				sTextParam = '&lt;!--[BEGIN ' + sSubsId + ' { &quot;type&quot;: &quot;subs&quot;, &quot;subs&quot;: ' + EncodeJson(aDistinctSubs) + ' }]--&gt;&lt;!--[END ' + sSubsId + ']--&gt;' + sTextParam;
+			}
+		}
+		return sTextParam;
+
+	"/>
+
+	<list_subs PROPERTY="1" PARAM="oArgs" EXPR="
+
+		var aSubs = [];
+		var objRegExp = tools_web.reg_exp_init();
+		objRegExp.Global = true;
+		objRegExp.IgnoreCase = true;
+		objRegExp.MultiLine = false;
+		objRegExp.Pattern = '\{{2}([^}]+)\}{2}';
+		var oMatches;
+		var sMatch;
+		var sParam;
+		var sModifier;
+		var aParts;
+		var sFldString;
+		var sDataType;
+		for(i=0; i&lt;oArgs.aFlds.length; i++)
+		{
+			sDataType = DataType(oArgs.aFlds[i]);
+			if(sDataType!='string')
+			{
+				if(sDataType=='object')
+				{
+					sFldString = EncodeJson(oArgs.aFlds[i]);
+				}
+				else
+				{
+					continue;
+				}
+			}
+			else
+			{
+				sFldString = oArgs.aFlds[i];
+			}
+			oMatches = objRegExp.Execute(sFldString);
+			for(j=0; j<oMatches.Count; j++)
+			{
+				sMatch = String(oMatches.Item(j));
+				sModifier = '';
+				sParam = Trim(StrReplace( StrReplace(sMatch, '{', ''), '}', '' ));
+				if(StrBegins(sMatch,'{{DATE:'))
+				{
+					sModifier = 'DATE';
+					sParam = StrReplace(sParam, 'DATE:', '');
+				}
+				else if(StrBegins(sMatch,'{{DATETIME:'))
+				{
+					sModifier = 'DATETIME';
+					sParam = StrReplace(sParam, 'DATETIME:', '');
+				}
+				else if(StrBegins(sMatch,'{{DATETIMESEC:'))
+				{
+					sModifier = 'DATETIMESEC';
+					sParam = StrReplace(sParam, 'DATETIMESEC:', '');
+				}
+				else if(StrBegins(sMatch,'{{B64:'))
+				{
+					sModifier = 'B64';
+					sParam = StrReplace(sParam, 'B64:', '');
+				}
+				else if(StrBegins(sMatch,'{{HTML:'))
+				{
+					sModifier = 'HTML';
+					sParam = StrReplace(sParam, 'HTML:', '');
+				}
+				else if(StrBegins(sMatch,'{{CODE:'))
+				{
+					sModifier = 'CODE';
+					sParam = StrReplace(sParam, 'CODE:', '');
+				}
+				aParts = sParam.split('.');
+				aSubs.push({ string: sMatch, base: aParts[0], replace_with: sParam, modifier: sModifier });
+			}
+		}
+		return aSubs;
+
+	"/>
+
+	<map_param_name PROPERTY="1" PARAM="oArgs" EXPR="
+
+		var sParam = '';
+		var bSub = false;
+		if(oArgs.oMapping!=undefined &amp;&amp; oArgs.sMapParam!=undefined)
+		{
+			if(oArgs.oMapping.HasProperty(oArgs.sMapParam))
+			{
+				if(oArgs.oMapping[oArgs.sMapParam]!='')
+				{
+					if(oArgs.oMapping[oArgs.sMapParam]=='__substitution__')
+					{
+						bSub = true;
+						sParam = oArgs.oMapping[oArgs.sMapParam + 'Value'];
+					}
+					else
+					{
+						sParam = oArgs.oMapping[oArgs.sMapParam];
+					}
+				}
+			}
+		}
+		return { name: sParam, sub: bSub };
+
+	"/>
+
+	<map_item_param PROPERTY="1" PARAM="oArgs" EXPR="
+
+		/**
+			* @function _MapItemParam
+			* @author VS
+			* @description Maps collection result field to aItems field.
+			* @param {object} oArgs - single param object
+			* @param {object} oArgs.oMapping - object to find mapping dependencies. Mandatory.
+			* @param {string} oArgs.sMapParam - property name in oMapping. Mandatory
+			* @param {object} oArgs.oElem - Element of collection result array. Mandatory
+			* @returns {string} Value of mapped oElem property
+		**/
+		var sParam = '';
+		if(oArgs.oMapping!=undefined && oArgs.oElem!=undefined && oArgs.sMapParam!=undefined)
+		{
+			if(oArgs.oMapping.HasProperty(oArgs.sMapParam))
+			{
+				if(oArgs.oMapping[oArgs.sMapParam]!='')
+				{
+					if(oArgs.oMapping[oArgs.sMapParam]=='__substitution__')
+					{
+						sParam = RValue(oArgs.oMapping[oArgs.sMapParam + 'Value']);
+					}
+					else
+					{
+						if(oArgs.oElem.HasProperty(oArgs.oMapping[oArgs.sMapParam]))
+						{
+							sParam = RValue(oArgs.oElem[oArgs.oMapping[oArgs.sMapParam]]);
+						}
+					}
+				}
+			}
+		}
+		return sParam;
+
+	"/>
+
+	<get_font_css CALLER-ENV="1" PROPERTY="1" PARAM="oArgs" EXPR="
+
+	/**
+		* @function _GetFontCSS
+		* @author VS
+		* @description Creates CSS for font as string or array.
+		* @param {object} oArgs - single param object
+		* @param {object} oArgs.oParams - params object to find properties. Mandatory.
+		* @param {string} oArgs.sPrefix - prefix for font properties. For example, sHeaderFont for sHeaderFontFamily, sHeaderFontSize etc. Mandatory
+		* @param {boolean} oArgs.bOmitSize - if true font-size will be omitted. Optional
+		* @param {string} oArgs.sSizePrefix - prefix for obtaining font size from oLPParams. Optional.
+		* @param {boolean} oArgs.bOmitWeight - if true font-weight will be omitted. Optional
+		* @param {boolean} oArgs.bOmitStyle - if true font-style will be omitted. Optional
+		* @param {boolean} oArgs.bOmitColor - if true color will be omitted. Optional
+		* @param {boolean} oArgs.bArray - if true function will return array of CSS strings. Optional
+		* @returns {string|array} CSS as string or array. Default - string
+	**/
+		var aFontCSS = [];
+		var sFont = '';
+		if(oArgs.oParams[oArgs.sPrefix + 'Family']=='Custom')
+		{
+			sFont = oArgs.oParams[oArgs.sPrefix + 'FamilyCustom'];
+			aFontCSS.push('font-family:' + oArgs.oParams[oArgs.sPrefix + 'FamilyCustom']);
+		}
+		else
+		{
+			sFont = oArgs.oParams[oArgs.sPrefix + 'Family'];
+			aFontCSS.push('font-family:' + oLPParams.fontfamily[ sFont ]);
+		}
+		if(!oArgs.HasProperty('bOmitWeight'))
+		{
+			if(sFont=='Inter' && oArgs.oParams[oArgs.sPrefix + 'Weight']=='semibold')
+			{
+				aFontCSS.push('font-weight: 600');
+			}
+			else
+			{
+				aFontCSS.push('font-weight:' + oLPParams.fontweight[oArgs.oParams[oArgs.sPrefix + 'Weight']]);
+			}
+		}
+		if(!oArgs.HasProperty('bOmitStyle'))
+		{
+			aFontCSS.push('font-style:' + oArgs.oParams[oArgs.sPrefix + 'Style']);
+		}
+		if(oArgs.oParams.HasProperty(oArgs.sPrefix + 'Color') && !oArgs.HasProperty('bOmitColor'))
+		{
+			aFontCSS.push('color:' + oArgs.oParams[oArgs.sPrefix + 'Color']);
+		}
+		if(!oArgs.HasProperty('bOmitSize'))
+		{
+			var sSize = (oArgs.oParams.HasProperty(oArgs.sPrefix + 'Size') ? oArgs.oParams[oArgs.sPrefix + 'Size'] : (oArgs.HasProperty('sSize') ? oArgs.sSize : 'medium'));
+			if(oArgs.HasProperty('sSizePrefix'))
+			{
+				aFontCSS.push('font-size:' + oLPParams[ oArgs.sSizePrefix + 'fontsize' ][ sSize ]);
+			}
+			else
+			{
+				aFontCSS.push('font-size:' + oLPParams.fontsize[ sSize ]);
+			}
+		}
+		return ((oArgs.HasProperty('bArray') && oArgs.bArray==true) ? aFontCSS : aFontCSS.join(';'));
+
+	"/>
+
+	<get_workarea_css PROPERTY="1" PARAM="oArgs" EXPR="
+
+	/**
+		* @function _GetWorkareaCSS
+		* @author VS
+		* @description Creates CSS for widget workarea as string or array.
+		* @param {object} oArgs - single param object
+		* @param {object} oArgs.oParams - params object to find properties. Mandatory.
+		* @param {boolean} oArgs.bArray - if true function will return array of CSS strings. Optional
+		* @returns {string|array} CSS as string or array. Default - string
+	**/
+		var aCSS = [ 'padding:' + oArgs.oParams.nPaddingTop + 'em ' + oArgs.oParams.nPaddingRight + 'em ' + oArgs.oParams.nPaddingBottom + 'em ' + oArgs.oParams.nPaddingLeft + 'em' ];
+		return (oArgs.HasProperty('bArray') ? aCSS : aCSS.join(';'));
+
+	"/>
+
+	<get_font_params_array PROPERTY="1" PARAM="oArgs" EXPR="
+
+	/**
+		* @function _GetFontParamsArray
+		* @author VS
+		* @description Creates font params descriptions!
+		* @param {object} oArgs - single param object
+		* @param {string} oArgs.sDataPrefix - prefix for properties. Mandatory.
+		* @param {string} oArgs.sVarPrefix - prefix for WVAR. Mandatory.
+		* @returns {array} Array of param descriptions
+	**/
+		var sVarPrefix = (oArgs.sVarPrefix!='' ? oArgs.sVarPrefix + '_' : '');
+		var sVarPostfix = (oArgs.sVarPrefix!='' ? '_' + oArgs.sVarPrefix : '');
+		var aRes =
+		[
+			{ name: (oArgs.sDataPrefix + 'FontFamily'), var_name: (sVarPrefix + 'font_family'), type: 'string', def: 'Roboto' },
+			{ name: (oArgs.sDataPrefix + 'FontFamilyCustom'), var_name: (sVarPrefix + 'font_family_custom'), type: 'string', def: '' },
+			{ name: (oArgs.sDataPrefix + 'FontSize'), var_name: (sVarPrefix + 'font_size'), type: 'string', def: 'medium' },
+			{ name: (oArgs.sDataPrefix + 'FontWeight'), var_name: (sVarPrefix + 'font_weight'), type: 'string', def: 'normal' },
+			{ name: (oArgs.sDataPrefix + 'FontStyle'), var_name: (sVarPrefix + 'font_style'), type: 'string', def: 'normal' }
+		];
+		if(!oArgs.HasProperty('bOmitColor'))
+		{
+			aRes.push({ name: (oArgs.sDataPrefix + 'FontColor'), var_name: ('color_font' + sVarPostfix), type: 'string', def: '#262626' });
+		}
+		return aRes;
+
+	"/>
+
+	<get_block_css PROPERTY="1" PARAM="oArgs" EXPR="
+
+	/**
+		* @function _GetBlockCSS
+		* @author VS
+		* @description Creates CSS for BLOCK as string or array.
+		* @param {object} oArgs - single param object
+		* @param {object} oArgs.oParams - params object to find properties. Mandatory.
+		* @param {boolean} oArgs.bArray - if true function will return array of CSS strings. Optional
+		* @returns {string|array} CSS as string or array. Default - string
+	**/
+		var aCSS = [];
+		var bOmitBorder = oArgs.HasProperty('bOmitBorder');
+		if(bOmitBorder)
+		{
+			bOmitBorder = (oArgs.bOmitBorder==true);
+		}
+		if(oArgs.oParams.HasProperty('bBlockHasBG'))
+		{
+			if(oArgs.oParams.bBlockHasBG)
+			{
+				aCSS.push('background-color:' + oArgs.oParams.sColorBlockBG);
+				if(oArgs.oParams.HasProperty('sBlockImgBG'))
+				{
+					if(oArgs.oParams.sBlockImgBG!='none')
+					{
+						aCSS.push('background-repeat:' + oArgs.oParams.sBlockImgRepeat);
+						if(oArgs.oParams.sBlockImgBG=='resource')
+						{
+							aCSS.push('background-image:url(\'download_file.html?file_id=' + oArgs.oParams.sBlockImgFile + '\')');
+						}
+						if(oArgs.oParams.sBlockImgPosition!='custom')
+						{
+							aCSS.push('background-position:' + oArgs.oParams.sBlockImgPosition);
+						}
+						else
+						{
+							aCSS.push('background-position:' + oArgs.oParams.sBlockImgPositionCustom);
+						}
+						if(oArgs.oParams.sBlockImgSize!='custom')
+						{
+							aCSS.push('background-size:' + oArgs.oParams.sBlockImgSize);
+						}
+						else
+						{
+							aCSS.push('background-size:' + oArgs.oParams.sBlockImgSizeCustom);
+						}
+					}
+				}
+			}
+		}
+		if(!bOmitBorder)
+		{
+			if(oArgs.oParams.HasProperty('bBlockHasBorder'))
+			{
+				if(oArgs.oParams.bBlockHasBorder)
+				{
+					aCSS.push('border-color:' + oArgs.oParams.sColorBlockBorder + ';border-width:' + oArgs.oParams.iBlockBorderWidth + 'px');
+				}
+			}
+		}
+		if((oArgs.oParams.HasProperty('bBlockHasBG') && oArgs.oParams.bBlockHasBG) || (oArgs.oParams.HasProperty('bBlockHasBorder') && oArgs.oParams.bBlockHasBorder))
+		{
+			aCSS.push('padding:' + oArgs.oParams.nBlockPaddingTop + 'em ' + oArgs.oParams.nBlockPaddingRight + 'em ' + oArgs.oParams.nBlockPaddingBottom + 'em ' + oArgs.oParams.nBlockPaddingLeft + 'em');
+		}
+		return (oArgs.HasProperty('bArray') ? aCSS : aCSS.join(';'));
+
+	"/>
+
+	<set_font_vars CALLER-ENV="1" PROPERTY="1" PARAM="oArgs" EXPR="
+
+	/**
+		* @function SetFontVars
+		* @author VS
+		* @description Creates font properties in oParams. Modifies oParams!
+		* @param {object} oArgs - single param object
+		* @param {object} oArgs.oParams - params object to append properties. Mandatory.
+		* @param {string} oArgs.sDataPrefix - prefix for properties. Mandatory.
+		* @param {string} oArgs.sVarPrefix - prefix for WVAR. Mandatory.
+		* @param {boolean} oArgs.bReplaceFontFamily - if true FontFamily will be replaced with value from oLPParams. Optional.
+		* @param {boolean} oArgs.bReplaceWithCustom - if true AND bReplaceFontFamily==true AND font family has value Custom then FontFamily will be replaced with custom value. Optional.
+		* @param {boolean} oArgs.bReplaceSize - if true FontSize will be replaced with value from oLPParams. Optional.
+		* @param {string} oArgs.sSizePrefix - prefix for obtaining font size from oLPParams. Optional.
+		* @param {boolean} oArgs.bReplaceWeight - if true FontWeight will be replaced with value from oLPParams. Optional.
+		* @returns {boolean} Always true
+	**/
+		var sVarPrefix = (oArgs.sVarPrefix!='' ? oArgs.sVarPrefix + '_' : '');
+		var sVarPostfix = (oArgs.sVarPrefix!='' ? '_' + oArgs.sVarPrefix : '');
+		var sCurFontFamily = oArgs.sDataPrefix + 'FontFamily';
+		var sCurFontFamilyCustom = oArgs.sDataPrefix + 'FontFamilyCustom';
+		var sCurFontSize = oArgs.sDataPrefix + 'FontSize';
+		var sCurFontWeight = oArgs.sDataPrefix + 'FontWeight';
+		oArgs.oParams[sCurFontFamily] = tools_web.get_web_param( curParams, sBlockPrefix + '.' + sVarPrefix + 'font_family', 'Roboto', true );
+		oArgs.oParams[sCurFontFamilyCustom] = tools_web.get_web_param( curParams, sBlockPrefix + '.' + sVarPrefix + 'font_family_custom', '', true );
+		if(oArgs.HasProperty('bReplaceFontFamily') && oArgs.bReplaceFontFamily==true)
+		{
+			if(oArgs.oParams[sCurFontFamily]!='Custom')
+			{
+				oArgs.oParams[sCurFontFamily] = oLPParams.fontfamily[oArgs.oParams[sCurFontFamily]];
+			}
+			else if(oArgs.HasProperty('bReplaceWithCustom') && oArgs.bReplaceWithCustom==true)
+			{
+				oArgs.oParams[sCurFontFamily] = oArgs.oParams[sCurFontFamilyCustom];
+			}
+		}
+		oArgs.oParams[sCurFontSize] = tools_web.get_web_param( curParams, sBlockPrefix + '.' + sVarPrefix + 'font_size', 'medium', true );
+		if(oArgs.HasProperty('bReplaceSize') && oArgs.bReplaceSize==true)
+		{
+			if(oArgs.HasProperty('sSizePrefix'))
+			{
+				oArgs.oParams[sCurFontSize] = oLPParams[oArgs.sSizePrefix + 'fontsize'][oArgs.oParams[sCurFontSize]];
+			}
+			else
+			{
+				oArgs.oParams[sCurFontSize] = oLPParams.fontsize[oArgs.oParams[sCurFontSize]];
+			}
+		}
+		oArgs.oParams[sCurFontWeight] = tools_web.get_web_param( curParams, sBlockPrefix + '.' + sVarPrefix + 'font_weight', 'normal', true );
+		if(oArgs.HasProperty('bReplaceWeight') && oArgs.bReplaceWeight==true)
+		{
+			oArgs.oParams[sCurFontWeight] = oLPParams.fontweight[ oArgs.oParams[sCurFontWeight] ];
+		}
+		oArgs.oParams[oArgs.sDataPrefix + 'FontStyle'] = tools_web.get_web_param( curParams, sBlockPrefix + '.' + sVarPrefix + 'font_style', 'normal', true );
+		oArgs.oParams[oArgs.sDataPrefix + 'FontColor'] = tools_web.get_web_param( curParams, sBlockPrefix + '.color_font' + sVarPostfix, '#333', true );
+		return true;
+
+	"/>
+
+	<update_runtime_env CALLER-ENV="1" PROPERTY="1" PARAM="oArgs" EXPR="
+
+	/**
+		* @function UpdateRuntimeEnv
+		* @author VS
+		* @description Update oRuntimeToBrowser with locals and defers. Modifies oRuntimeToBrowser!
+		* @param {object} oArgs - single param object
+		* @param {object} oArgs.oData - params object to append properties. Mandatory.
+		* @returns {boolean} Always true
+	**/
+		if(!bLPE) // update locals and set tab index
+		{
+			oArgs.oData.aUsedLocal = aUsedLocal;
+			oArgs.oData.aUsedFlds = aUsedFlds;
+			var sMyTabBlockId = Request.Session.GetOptProperty('LPTabBlock', undefined);
+			if(sMyTabBlockId!=undefined)
+			{
+				oArgs.oData.sMyTabBlockId = sMyTabBlockId;
+			}
+			var iMyTab = Request.Session.GetOptProperty('LPCurrentTab', undefined);
+			if(iMyTab!=undefined)
+			{
+				oArgs.oData.iMyTab = iMyTab;
+			}
+		}
+		return true;
+
+	"/>
+
+
+
+	<copy_web_mode PROPERTY="1" PARAM="oSourceWebModeParam" PARAM="oWebModeFieldsParam" EXPR="
+			var iSourceWebMode = OptInt( oSourceWebModeParam );
+			if ( iSourceWebMode == undefined )
+			{
+				var teSourceWebMode = oSourceWebModeParam;
+				iSourceWebMode = teSourceWebMode.id.Value;
+			}
+			else
+			{
+				var teSourceWebMode = OpenDoc( UrlFromDocID( iSourceWebMode ) ).TopElem;
+			}
+
+			var sNewMode = oWebModeFieldsParam.code;
+			var sNewName = oWebModeFieldsParam.GetOptProperty( 'name', '' );
+
+			var arrMergeTemplates = [];
+			var xarrSourceOverrideWebTemplate = tools.xquery( 'for $elem in override_web_templates where $elem/mode = ' + XQueryLiteral( teSourceWebMode.code ) + ' return $elem/id, $elem/__data' );
+			for ( catSourceOverrideWebTemplateElem in xarrSourceOverrideWebTemplate )
+			{
+				teSourceOverrideWebTemplate = OpenDoc( UrlFromDocID( catSourceOverrideWebTemplateElem.id ) ).TopElem
+
+				docNewOverrideWebTemplate = OpenNewDoc( 'x-local://wtv/wtv_override_web_template.xmd' );
+				docNewOverrideWebTemplate.BindToDb();
+				iNewOverrideWebTemplateID = docNewOverrideWebTemplate.DocID;
+				docNewOverrideWebTemplate.TopElem.AssignElem( teSourceOverrideWebTemplate );
+				docNewOverrideWebTemplate.TopElem.id = iNewOverrideWebTemplateID;
+				docNewOverrideWebTemplate.TopElem.mode = sNewMode;
+
+				arrMergeTemplates.push( {
+					new_id: docNewOverrideWebTemplate.DocID,
+					new_doc: docNewOverrideWebTemplate,
+					source_id: teSourceOverrideWebTemplate.id.Value,
+					source_parent_id: teSourceOverrideWebTemplate.parent_id.Value
+				} );
+			}
+
+			for ( oMergeTemplateElem in arrMergeTemplates )
+			{
+				if ( oMergeTemplateElem.source_parent_id != null )
+				{
+					oMergeTemplate = ArrayOptFindByKey( arrMergeTemplates, oMergeTemplateElem.source_parent_id, 'source_id' );
+					if ( oMergeTemplate != undefined )
+					{
+						oMergeTemplateElem.new_doc.TopElem.parent_id = oMergeTemplate.new_id;
+					}
+				}
+
+				fldWvar = oMergeTemplateElem.new_doc.TopElem.wvars.GetOptChildByKey( 'block_container.owt_id' );
+				if ( fldWvar != undefined )
+				{
+					iOwtID = OptInt( fldWvar.value );
+					if ( iOwtID != undefined )
+					{
+						oMergeTemplate = ArrayOptFindByKey( arrMergeTemplates, iOwtID, 'source_id' );
+						if ( oMergeTemplate != undefined )
+						{
+							fldWvar.value = ( '' + oMergeTemplate.new_id );
+						}
+					}
+				}
+
+				for ( fldWvarElem in oMergeTemplateElem.new_doc.TopElem.wvars )
+				{
+					if ( fldWvarElem.value.HasValue )
+					{
+						sWvarValue = fldWvarElem.value.Value;
+						for ( oReplaceMergeTemplateElem in arrMergeTemplates )
+						{
+							sWvarValue = StrReplace( sWvarValue, '' + oReplaceMergeTemplateElem.source_id, '' + oReplaceMergeTemplateElem.new_id );
+							sWvarValue = StrReplace( sWvarValue, ( '0x' + StrHexInt( oReplaceMergeTemplateElem.source_id, 16 ) ), ( '0x' + StrHexInt( oReplaceMergeTemplateElem.new_id, 16 ) ) );
+						}
+						fldWvarElem.value = sWvarValue;
+					}
+				}
+
+				oMergeTemplateElem.new_doc.Save();
+			}
+
+			var docWebMode = OpenNewDoc( 'x-local://wtv/wtv_web_mode.xmd' );
+			docWebMode.BindToDb();
+			var iWebModeID = docWebMode.DocID;
+			var teWebMode = docWebMode.TopElem;
+
+			teWebMode.AssignElem( teSourceWebMode );
+			teWebMode.id = iWebModeID;
+			teWebMode.is_std = false;
+			teWebMode.changed = false;
+			teWebMode.code = sNewMode;
+			if ( sNewName != '' )
+			{
+				teWebMode.name = sNewName;
+			}
+
+			for ( fldTemplateLinkElem in teWebMode.template_links )
+			{
+				if ( fldTemplateLinkElem.source_template_id.HasValue )
+				{
+					oMergeTemplate = ArrayOptFindByKey( arrMergeTemplates, fldTemplateLinkElem.source_template_id, 'source_id' );
+					if ( oMergeTemplate != undefined )
+					{
+						fldTemplateLinkElem.source_template_id = oMergeTemplate.new_id;
+					}
+				}
+				if ( fldTemplateLinkElem.target_template_id.HasValue )
+				{
+					oMergeTemplate = ArrayOptFindByKey( arrMergeTemplates, fldTemplateLinkElem.target_template_id, 'source_id' );
+					if ( oMergeTemplate != undefined )
+					{
+						fldTemplateLinkElem.target_template_id = oMergeTemplate.new_id;
+					}
+				}
+			}
+
+			for ( sWvarNameElem in [ 'webmode.metrics', 'webmode.local_vars' ] )
+			{
+				fldWvar = teWebMode.wvars.GetOptChildByKey( sWvarNameElem );
+				if ( fldWvar == undefined )
+				{
+					continue;
+				}
+				sWvarValue = Base64Decode( fldWvar.value );
+				if ( sWvarValue != '' )
+				{
+					for ( oMergeTemplateElem in arrMergeTemplates )
+					{
+						sWvarValue = StrReplace( sWvarValue, ( '0x' + StrHexInt( oMergeTemplateElem.source_id, 16 ) ), ( '0x' + StrHexInt( oMergeTemplateElem.new_id, 16 ) ) );
+					}
+				}
+				fldWvar.value = Base64Encode( sWvarValue );
+			}
+
+			docWebMode.Save();
+			return docWebMode;
+	"/>
+
+
+	<clear_template_cache PROPERTY="1" ALLOW-CALL-FROM-CLIENT="1" PARAM="iWebDesignIDParam" EXPR="
+			try
+			{
+				iWebDesignIDParam = OptInt( iWebDesignIDParam );
+				if ( iWebDesignIDParam == undefined )
+				{
+					throw 'iWebDesignIDParam is not integer';
+				}
+			}
+			catch ( err )
+			{
+				iWebDesignIDParam = null;
+			}
+
+			var iRes = 0;
+			var xarrDataIDs = [];
+
+			if ( iWebDesignIDParam == null )
+			{
+				xarrDataIDs = XQuery( 'for $elem in object_datas where $elem/object_data_type_id = ' + tools.get_default_object_id( 'object_data_type', 'fcache' ) + ' return $elem/Fields(\'id\')' );
+			}
+			else
+			{
+				var xarrWebModeIDs = XQuery( 'for $elem in web_modes where $elem/web_design_id = ' + iWebDesignIDParam + ' return $elem/Fields(\'id\')' );
+				xarrDataIDs = XQuery( 'for $elem in object_datas where MatchSome( $elem/object_id, (' + ArrayMerge( xarrWebModeIDs, 'id', ',' ) + ') ) return $elem/Fields(\'id\')' );
+			}
+			for ( catDataIDParam in xarrDataIDs )
+			{
+				DeleteDoc( UrlFromDocID( catDataIDParam.id ), true );
+				iRes++;
+			}
+			return iRes;
+	"/>
+
+</tools_lp>
+
+</SPXML-INLINE-FORM>
