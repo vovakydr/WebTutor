@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<cc_collection_adaptation SPXML-FORM="x-local://udt/udt_cc_collection_adaptation.xmd">
+	<id>0x61438B683FCF7326</id>
+	<access>
+		<access_level>0</access_level>
+	</access>
+	<name>Программа адаптации Абгарян Карен Артакович</name>
+	<person_id>0x612DB6BA7D7F6389</person_id>
+	<mentor_id>0x634DB9503D190D0B</mentor_id>
+	<mentor_career_plans_id>0x61438B685FFD7070</mentor_career_plans_id>
+	<career_plans_persons>
+		<career_plans_person>
+			<career_plans_person_id>0x6140D7C5FBF337E5</career_plans_person_id>
+		</career_plans_person>
+		<career_plans_person>
+			<career_plans_person_id>0x61438B683FCF7326</career_plans_person_id>
+		</career_plans_person>
+	</career_plans_persons>
+	<doc_info>
+		<creation>
+			<date>2024-03-22T08:01:13+00:00</date>
+		</creation>
+		<modification>
+			<date>2024-03-26T08:00:22+00:00</date>
+		</modification>
+	</doc_info>
+</cc_collection_adaptation>
