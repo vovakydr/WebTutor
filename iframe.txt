@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", function() {
             var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
             iframe.style.height = iframeDocument.body.scrollHeight + 'px';
         } catch (error) {
-            // Игнорируем ошибки доступа к iframe
+            console.error("Ошибка при обновлении высоты iframe:", error);
         }
     }
 
@@ -17,14 +17,14 @@ document.addEventListener("DOMContentLoaded", function() {
         try {
             var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
             var loaderContainer = iframeDocument.querySelector('.loader-container');
-            
+
             if (loaderContainer && !loaderContainer.classList.contains('show')) {
                 // Класс 'show' убран, обновляем высоту iframe
                 updateIframeHeight();
                 return true; // Останавливаем интервал
             }
         } catch (error) {
-            // Игнорируем ошибки доступа к iframe
+            console.error("Ошибка при проверке класса loader-container:", error);
         }
         return false; // Продолжаем интервал
     }
@@ -34,11 +34,9 @@ document.addEventListener("DOMContentLoaded", function() {
         if (checkLoaderContainer()) {
             clearInterval(intervalId); // Останавливаем интервал
         }
-    }, 100); // Проверяем каждые 100 миллисекунд
-
-    // Также добавляем обработчик события изменения размера окна
-    window.addEventListener('resize', updateIframeHeight);
+    }, 500); // Проверяем каждые 500 миллисекунд
 });
+
 
 </script>
 <style>
