@@ -1,0 +1,172 @@
+<%
+var methodCode = Request.Query.HasProperty('method') ? Request.Query.GetProperty('method') : "";
+var searchProgram = Request.Query.HasProperty('search') ? Request.Query.GetProperty('search') : "";
+var programID = Request.Query.HasProperty('program_id') ? OptInt(Request.Query.GetProperty('program_id'), null) : null;
+var searchColl = Request.Query.HasProperty('search_coll') ? Request.Query.GetProperty('search_coll') : "";
+
+function getValue(obj, sNameParam){
+    var sValue
+    sValue = obj.GetOptProperty(sNameParam);
+    if(sValue == undefined){
+        sValue == '';
+    }
+    return sValue;
+}
+
+function getFormCreateEvent(respObj){
+    var docEvent, teEvent, iEventId;
+    var docEducationMethodSample = undefined;
+    var teEducationMethodSample = undefined;
+
+    try{
+        docEducationMethodSample = tools.open_doc(Int(getValue(respObj,'program_id')));
+        teEducationMethodSample = docEducationMethodSample.TopElem;
+
+        docEvent = OpenNewDoc("x-local://wtv/wtv_event.xmd");
+        docEvent.BindToDb(DefaultDb);
+        teEvent = docEvent.TopElem;
+
+        iEventId = docEvent.DocID;
+
+        teEvent.code = teEducationMethodSample.code;
+        teEvent.name = teEducationMethodSample.name;
+        teEvent.start_date = OptDate(getValue(respObj, 'start_date'));
+        teEvent.finish_date = OptDate(getValue(respObj, 'end_date'));
+
+        teEvent.status_id = "project";
+        teEvent.type_id = "education_method";
+        teEvent.event_type_id = Int(getValue(respObj,'program_id'));
+        teEvent.education_org_id = teEducationMethodSample.education_org_id;
+        teEvent.education_org_type = "id";
+        teEvent.education_org_name = teEducationMethodSample.education_org_id.OptForeignElem.name;
+	    teEvent.is_open = !getValue(respObj, 'is_closed');
+        teEvent.max_person_num = getValue(respObj, 'max_person');
+	    teEvent.min_person_num = getValue(respObj, 'min_person');
+        teEvent.organizational_form = 'corporative';
+	    teEvent.event_form = getValue(respObj, 'event_format');
+        teEvent.default_response_type_id = teEducationMethodSample.default_response_type_id;
+        teEvent.mandatory_fill_response = teEducationMethodSample.mandatory_fill_response;
+
+
+        teEvent.lectors.AssignElem(teEducationMethodSample.lectors);
+        teEvent.desc = getValue(respObj, 'desc');
+
+        teEvent.custom_elems.ObtainChildByKey('skillType').value = getValue(respObj, 'skill_type');
+        
+        teEvent.custom_elems.ObtainChildByKey('isMandatory').value = tools_web.is_true(teEducationMethodSample.custom_elems.ObtainChildByKey('f_wu2f').value) ? 'Обязательное' : 'Не обязательное';
+        teEvent.custom_elems.ObtainChildByKey('link').value = getValue(respObj, 'event_url');
+
+        var typeRetail = "";
+        if(Int(getValue(respObj, 'boss')) == 1){
+            typeRetail += "boss][Для руководителей";
+        }
+        if(Int(getValue(respObj, 'spec')) == 1){
+            if(StrLen(typeRetail) > 0){
+                typeRetail += ";spec][Для специалистов"
+            }
+        }
+        teEvent.custom_elems.ObtainChildByKey('for_type_retail').value = typeRetail;
+
+        var _sMacroCheckboxes = ArrayMerge(getValue(respObj, 'macroCheckboxes'),'This',';');
+        teEvent.custom_elems.ObtainChildByKey('macroregion').value = _sMacroCheckboxes;
+
+        var _sChannelCheckboxes = ArrayMerge(getValue(respObj, 'channelCheckboxes'),'This',';');
+        teEvent.custom_elems.ObtainChildByKey('channel').value =  _sChannelCheckboxes;
+
+        teEvent.custom_elems.ObtainChildByKey('category').value = getValue(respObj, 'type');
+        teEvent.custom_elems.ObtainChildByKey('format_education').value = getValue(respObj, 'format');
+
+        docEvent.Save();
+
+        personsArr = getValue(respObj, 'persons');
+        for(person in personsArr){
+            tools.add_person_to_event(Int(person.id), iEventId);
+        }
+        return true;
+    }catch(err){
+        alert("В результате создания мероприятия произошла ошибка: "+err);
+        return false;
+    }
+}
+
+var result = {};
+switch(methodCode) {
+    case 'get_program':
+        if (searchProgram !== "") {
+            var arrPrograms = ArrayDirect(XQuery("for $elem in education_methods where contains($elem/name, " + XQueryLiteral(searchProgram) + ") and $elem/state_id != 'archive' return $elem"));
+            result.SetProperty('programs', arrPrograms);
+        }
+        break;
+    case 'get_detail':
+        if (programID != null) {
+            try {
+                var programDoc = OpenDoc(UrlFromDocID(programID));
+                var teProgram = programDoc.TopElem;
+                
+                var resultObj = {
+                    id: teProgram.id.Value,
+                    name: teProgram.name.Value,
+                    days: teProgram.GetOptProperty("duration_days", '0').Value,
+                    hours: teProgram.GetOptProperty("duration", 0).Value,
+                    participants: teProgram.GetOptProperty("person_num", 0).Value,
+                    instructor: ArrayMerge(XQuery("for $elem in lectors where MatchSome($elem/id, (" + ArrayMerge(teProgram.lectors, 'This.lector_id', ',') + ")) return $elem"), 'This.person_fullname', ';'),
+                    organization: teProgram.education_org_id.OptForeignElem.name.Value,
+                    code: teProgram.code.Value,
+		            description: teProgram.desc.Value
+                };
+                result.SetProperty("program_info", resultObj);
+            } catch (err) {
+                alert("@@@err - " + err);
+            }
+        }
+        break;
+        case 'find_coll':
+            if(searchColl != ""){
+                try {
+                    resColl = ArrayDirect(XQuery("for $elem in collaborators where contains($elem/fullname, " + XQueryLiteral(searchColl) + ") and $elem/is_dismiss = false() return $elem"));
+                    if(resColl != undefined) {
+                        result.SetProperty("coll_info", resColl);
+                    }
+                }catch(err){
+                    alert("@@@err - " + err);
+                }
+            }
+	    break;
+        case 'upload_excel':
+            var excelFile = Request.Query.file;
+            if (!excelFile) {
+                alert("No file uploaded");
+            }
+            try{
+                var collRes = [];
+                PutFileData(AppDirectoryPath()+'\\wt_data\\'+excelFile.FileName,excelFile)
+                _rows = OpenDoc(FilePathToUrl(AppDirectoryPath()+'\\wt_data\\'+excelFile.FileName), "format=excel").TopElem.worksheet;
+
+                for(i=1;i<ArrayCount(_rows);i++){
+                    //alert(_rows[i][1])
+                    findForCode = ArrayOptFirstElem(XQuery("for $elem in collaborators where $elem/code = " + XQueryLiteral(_rows[i][1]) + " and $elem/is_dismiss = false() return $elem"));
+                    if(findForCode != undefined){
+                        collRes.push(findForCode);
+                    }
+                }
+		        DeleteFile(FilePathToUrl(AppDirectoryPath()+'\\wt_data\\'+excelFile.FileName));
+                result.SetProperty("coll_info", collRes);
+            }catch(err){
+                alert("УПС! - "+err)
+            }
+        break;
+	case 'create_event':
+
+		var resp = ParseJson ( DecodeCharset( Request.Body, 'utf-8' ) );
+		//alert("rrr - " +g.GetProperty('desc'));
+        eventCreated = getFormCreateEvent(resp);
+        result.SetProperty("create_event", eventCreated);
+        break;
+
+    default:
+        break;
+}
+//alert("test - " +tools.object_to_text(result, 'json'))
+Response.Write(tools.object_to_text(result, 'json'));
+
+%>
