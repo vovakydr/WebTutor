@@ -1,34 +1,25 @@
 <script>
-document.addEventListener("DOMContentLoaded", function(){
-    var iframes = document.getElementsByTagName('iframe');
-    
-    function resizeIframe(iframe) {
-        try {
-            var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
-            iframe.style.height = iframeDocument.body.scrollHeight + 'px';
-        } catch (error) {
-            console.error("Ошибка при изменении размера iframe:", error);
-        }
-    }
-
-    for (var i = 0; i < iframes.length; i++) {
-        iframes[i].onload = function(){
-            resizeIframe(this);
-
-            // Используем MutationObserver для отслеживания изменений содержимого iFrame
-            var observer = new MutationObserver(function(mutations) {
-                resizeIframe(iframes[i]);
-            });
-            observer.observe(this.contentDocument.body, { childList: true, subtree: true });
-        }
-    }
-
+document.addEventListener("DOMContentLoaded", function() {
+    var iframe = document.querySelector('iframe');
+    iframe.onload = function() {
+        resizeIframe(iframe);
+    };
     window.addEventListener('resize', function() {
-        for (var i = 0; i < iframes.length; i++) {
-            resizeIframe(iframes[i]);
-        }
+        resizeIframe(iframe);
     });
 });
+
+function resizeIframe(iframe) {
+    try {
+        var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
+        if (iframeDocument.body) {
+            iframe.style.height = iframeDocument.body.scrollHeight + 'px';
+        }
+    } catch (error) {
+        console.error("Unable to access iframe content:", error);
+    }
+}
+
 </script>
 <style>
 .wt-lp-iframe-wrapper {
