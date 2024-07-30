@@ -8,6 +8,9 @@ document.addEventListener("DOMContentLoaded", function() {
             var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
             iframe.style.height = iframeDocument.body.scrollHeight + 'px';
             console.log("Высота iframe обновлена:", iframe.style.height);
+
+            // Добавляем обработчики событий на кнопки после обновления высоты iframe
+            addButtonEventListeners();
         } catch (error) {
             console.error("Ошибка при обновлении высоты iframe:", error);
         }
@@ -43,6 +46,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     checkLoaderContainer();
                 });
             });
+            console.log("Обработчики событий на кнопки добавлены");
         } catch (error) {
             console.error("Ошибка при добавлении обработчиков событий на кнопки:", error);
         }
@@ -58,11 +62,16 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // Обработчик события загрузки содержимого iframe
     iframe.addEventListener('load', function() {
-        console.log("Содержимое iframe загружено, добавление обработчиков событий на кнопки");
-        addButtonEventListeners();
+        console.log("Содержимое iframe загружено, запуск интервала проверки");
+        // Запуск интервала проверки
+        var intervalId = setInterval(function() {
+            if (checkLoaderContainer()) {
+                clearInterval(intervalId); // Останавливаем интервал
+                console.log("Интервал проверки остановлен");
+            }
+        }, 500); // Проверяем каждые 500 миллисекунд
     });
 });
-
 </script>
 <style>
 .wt-lp-iframe-wrapper {
