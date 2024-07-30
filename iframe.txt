@@ -1,24 +1,31 @@
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     var iframe = document.querySelector('iframe');
-    iframe.onload = function() {
-        resizeIframe(iframe);
-    };
+    
+    // Запускаем интервал для проверки содержимого iframe
+    var checkIframeContent = setInterval(function() {
+        try {
+            var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
+            if (iframeDocument.body) {
+                // Если содержимое загружено, изменяем высоту iframe
+                iframe.style.height = iframeDocument.body.scrollHeight + 'px';
+                clearInterval(checkIframeContent); // Останавливаем интервал
+            }
+        } catch (error) {
+            // Игнорируем ошибки доступа к iframe
+        }
+    }, 100); // Проверяем каждые 100 миллисекунд
+
+    // Также добавляем обработчик события изменения размера окна
     window.addEventListener('resize', function() {
-        resizeIframe(iframe);
+        try {
+            var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
+            iframe.style.height = iframeDocument.body.scrollHeight + 'px';
+        } catch (error) {
+            // Игнорируем ошибки доступа к iframe
+        }
     });
 });
-
-function resizeIframe(iframe) {
-    try {
-        var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
-        if (iframeDocument.body) {
-            iframe.style.height = iframeDocument.body.scrollHeight + 'px';
-        }
-    } catch (error) {
-        console.error("Unable to access iframe content:", error);
-    }
-}
 
 </script>
 <style>
