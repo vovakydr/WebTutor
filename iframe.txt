@@ -12,51 +12,33 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // Функция для отслеживания изменений в классе loader-container
-    function observeLoaderContainer() {
+    // Функция для проверки наличия класса show в loader-container
+    function checkLoaderContainer() {
         try {
             var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
             var loaderContainer = iframeDocument.querySelector('.loader-container');
             
-            if (loaderContainer) {
-                var observer = new MutationObserver(function(mutations) {
-                    mutations.forEach(function(mutation) {
-                        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                            // Проверяем наличие класса 'show'
-                            if (!loaderContainer.classList.contains('show')) {
-                                // Класс 'show' был убран, обновляем высоту iframe
-                                updateIframeHeight();
-                            }
-                        }
-                    });
-                });
-
-                // Начинаем наблюдение за изменениями атрибутов
-                observer.observe(loaderContainer, { attributes: true });
+            if (loaderContainer && !loaderContainer.classList.contains('show')) {
+                // Класс 'show' убран, обновляем высоту iframe
+                updateIframeHeight();
+                return true; // Останавливаем интервал
             }
         } catch (error) {
             // Игнорируем ошибки доступа к iframe
         }
+        return false; // Продолжаем интервал
     }
 
     // Запускаем интервал для проверки содержимого iframe
-    var checkIframeContent = setInterval(function() {
-        try {
-            var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
-            if (iframeDocument.body) {
-                // Если содержимое загружено, начинаем отслеживание изменений в классе loader-container
-                observeLoaderContainer();
-                clearInterval(checkIframeContent); // Останавливаем интервал
-            }
-        } catch (error) {
-            // Игнорируем ошибки доступа к iframe
+    var intervalId = setInterval(function() {
+        if (checkLoaderContainer()) {
+            clearInterval(intervalId); // Останавливаем интервал
         }
     }, 100); // Проверяем каждые 100 миллисекунд
 
     // Также добавляем обработчик события изменения размера окна
     window.addEventListener('resize', updateIframeHeight);
 });
-
 
 </script>
 <style>
