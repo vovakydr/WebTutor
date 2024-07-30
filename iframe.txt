@@ -32,6 +32,22 @@ document.addEventListener("DOMContentLoaded", function() {
         return false; // Продолжаем интервал
     }
 
+    // Функция для добавления обработчиков событий на кнопки
+    function addButtonEventListeners() {
+        try {
+            var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
+            var buttons = iframeDocument.querySelectorAll('button.arrow.right, button.arrow.left');
+            buttons.forEach(function(button) {
+                button.addEventListener('click', function() {
+                    console.log("Кнопка нажата, проверка содержимого iframe");
+                    checkLoaderContainer();
+                });
+            });
+        } catch (error) {
+            console.error("Ошибка при добавлении обработчиков событий на кнопки:", error);
+        }
+    }
+
     // Запускаем интервал для проверки содержимого iframe
     var intervalId = setInterval(function() {
         if (checkLoaderContainer()) {
@@ -39,9 +55,13 @@ document.addEventListener("DOMContentLoaded", function() {
             console.log("Интервал проверки остановлен");
         }
     }, 500); // Проверяем каждые 500 миллисекунд
+
+    // Обработчик события загрузки содержимого iframe
+    iframe.addEventListener('load', function() {
+        console.log("Содержимое iframe загружено, добавление обработчиков событий на кнопки");
+        addButtonEventListeners();
+    });
 });
-
-
 
 </script>
 <style>
